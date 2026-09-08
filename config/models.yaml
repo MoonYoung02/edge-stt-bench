@@ -1,0 +1,89 @@
+models:
+  tiny:
+    adapter: whisper_python
+    checkpoint: tiny
+    device: mps
+  base:
+    adapter: whisper_python
+    checkpoint: base
+    device: mps
+  small:
+    adapter: whisper_python
+    checkpoint: small
+    device: mps
+  medium:
+    adapter: whisper_python
+    checkpoint: medium
+    device: mps
+  large-v1:
+    adapter: whisper_python
+    checkpoint: large-v1
+    device: mps
+  large-v2:
+    adapter: whisper_python
+    checkpoint: large-v2
+    device: mps
+  large-v3:
+    adapter: whisper_python
+    checkpoint: large-v3
+    device: mps
+  large-v3-turbo:
+    adapter: whisper_python
+    checkpoint: large-v3-turbo
+    device: mps
+  whisper-cpp-tiny-q5_1:
+    adapter: whisper_cpp
+    checkpoint: models/ggml-tiny-q5_1.bin
+    device: cpu
+    options:
+      model_repo: ggerganov/whisper.cpp
+      model_file: ggml-tiny-q5_1.bin
+  whisper-cpp-tiny-q8_0:
+    adapter: whisper_cpp
+    checkpoint: models/ggml-tiny-q8_0.bin
+    device: cpu
+    options:
+      model_repo: ggerganov/whisper.cpp
+      model_file: ggml-tiny-q8_0.bin
+  whisper-cpp-base-q5_1:
+    adapter: whisper_cpp
+    checkpoint: models/ggml-base-q5_1.bin
+    device: cpu
+    options:
+      model_repo: ggerganov/whisper.cpp
+      model_file: ggml-base-q5_1.bin
+  whisper-cpp-base-q8_0:
+    adapter: whisper_cpp
+    checkpoint: models/ggml-base-q8_0.bin
+    device: cpu
+    options:
+      model_repo: ggerganov/whisper.cpp
+      model_file: ggml-base-q8_0.bin
+  whisper-cpp-small-q5_1:
+    adapter: whisper_cpp
+    checkpoint: models/ggml-small-q5_1.bin
+    device: cpu
+    options:
+      model_repo: ggerganov/whisper.cpp
+      model_file: ggml-small-q5_1.bin
+  whisper-cpp-small-q8_0:
+    adapter: whisper_cpp
+    checkpoint: models/ggml-small-q8_0.bin
+    device: cpu
+    options:
+      model_repo: ggerganov/whisper.cpp
+      model_file: ggml-small-q8_0.bin
+  whisper-cpp-medium-q5_0:
+    adapter: whisper_cpp
+    checkpoint: models/ggml-medium-q5_0.bin
+    device: cpu
+    options:
+      model_repo: ggerganov/whisper.cpp
+      model_file: ggml-medium-q5_0.bin
+  whisper-cpp-medium-q8_0:
+    adapter: whisper_cpp
+    checkpoint: models/ggml-medium-q8_0.bin
+    device: cpu
+    options:
+      model_repo: ggerganov/whisper.cpp
+      model_file: ggml-medium-q8_0.bin

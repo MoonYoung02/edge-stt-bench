@@ -1,0 +1,21 @@
+.DS_Store
+/.venv/
+/.venv-diarization/
+__pycache__/
+*.py[cod]
+/.claude/
+
+# 데스크톱 sttbench 데이터/결과물 (라이선스상 재배포 금지 + 재생성 가능한 산출물)
+/data/
+/results/
+/runs/
+
+# whisper.cpp GGML 모델과 sherpa-onnx 모델 (용량이 커서 별도 다운로드로 확보)
+/models/*.bin
+/models/.cache/
+/models/sherpa-onnx/*
+!/models/sherpa-onnx/*.md
+
+# 모바일 벤치마크 실행 결과물 (기기별 산출물, runs/와 동일한 이유로 제외)
+/mobile_bench/benchmark-results/
+/mobile_bench/received-benchmark-results/

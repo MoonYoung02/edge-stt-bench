@@ -1,0 +1,8 @@
+# Restrict code generation to the package sources.
+targets:
+  $default:
+    sources:
+      include:
+        - lib/**
+        - test/**
+        - pubspec.yaml
