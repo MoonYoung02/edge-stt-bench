@@ -97,6 +97,8 @@ def main() -> None:
     runs_by_batch: dict[str, list[dict[str, Any]]] = {}
     batch_meta: dict[str, dict[str, Any]] = {}
     unbatched_run_count = 0
+    seen_run_ids: set[str] = set()
+    duplicate_count = 0
 
     for path in files:
         payload = load_json(path)
@@ -105,11 +107,23 @@ def main() -> None:
         if is_batch_file(payload):
             batch_meta[str(payload["batchId"])] = payload
         elif is_run_file(payload):
+            # The app's export/Downloads flow can leave the same runId
+            # exported twice (e.g. Android suffixing a re-export
+            # "... (1).json" instead of overwriting) — keep the first copy
+            # seen, or a sample gets scored twice under one batch.
+            run_id = payload["runId"]
+            if run_id in seen_run_ids:
+                duplicate_count += 1
+                continue
+            seen_run_ids.add(run_id)
             batch_id = payload.get("batchId")
             if batch_id:
                 runs_by_batch.setdefault(str(batch_id), []).append(payload)
             else:
                 unbatched_run_count += 1
+
+    if duplicate_count:
+        print(f"참고: 같은 runId가 중복 발견돼 {duplicate_count}개 파일을 건너뛰었습니다.")
 
     if not runs_by_batch:
         raise SystemExit(
