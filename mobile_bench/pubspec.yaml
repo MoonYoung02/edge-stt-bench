@@ -33,6 +33,8 @@ dependencies:
   path_provider: ^2.1.5
   whisper_ggml:
     path: packages/whisper_ggml
+  sherpa_onnx: ^1.13.7
+  archive: ^4.2.0
 
 dev_dependencies:
   flutter_test:

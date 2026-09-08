@@ -78,9 +78,19 @@ KCSC 정답이 있으면 해당 화자ID와 성별을 사용하고, 정답이 �
 | Whisper Large V3 Turbo Q5_0 | 574.0MB |
 | Whisper Large V3 Turbo Q8_0 | 874.2MB |
 | Whisper Large V3 Q5_0 | 1,081.1MB |
+| Sherpa-ONNX 한국어 스트리밍 Zipformer | 132.4MB |
+| Sherpa-ONNX SenseVoice Small (int8) | 229.5MB |
 
 500MB 이상 모델은 다운로드 전에 저장공간과 RAM 안내를 표시합니다. 모두 한국어를
 지원하는 다국어 모델이며 영어 전용 `.en` 모델은 현재 카탈로그에서 제외했습니다.
+
+Whisper 계열은 `whisper.cpp`(GGML, 단일 파일) 엔진으로, Sherpa-ONNX 두 모델은
+`sherpa-onnx`(ONNX Runtime, `.tar.bz2`로 배포되어 앱이 내부에서 압축 해제) 엔진으로
+실행됩니다. 한국어 스트리밍 Zipformer는 오디오를 100ms 청크로 나눠 넣는 실시간
+스트리밍 방식으로, SenseVoice는 파일 전체를 한 번에 넣는 오프라인 방식으로
+동작합니다. 두 sherpa-onnx 모델 모두 현재는 16kHz mono 16-bit PCM WAV 입력만
+지원합니다(KCSC 샘플은 전부 이 형식). 다른 포맷/샘플레이트 입력은 아직
+whisper.cpp처럼 FFmpeg로 자동 정규화되지 않고 오류로 표시됩니다.
 
 현재 `data/` 전체를 포함한 ARM64 release APK 크기는 약 710MB입니다.
 
@@ -173,7 +183,9 @@ mobile_bench/
 
 ## 현재 제한
 
-- 모델 카탈로그는 현재 공식 whisper.cpp GGML 다국어 모델로 한정되어 있습니다.
+- 모델 카탈로그는 whisper.cpp GGML 다국어 모델과 sherpa-onnx 한국어 스트리밍
+  Zipformer/SenseVoice int8 두 종으로 구성됩니다. sherpa-onnx 두 모델은 현재
+  16kHz mono WAV 입력만 지원합니다.
 - 1회 실행만 지원하며 batch/shard와 자동 Job 실행은 아직 없습니다.
 - 표시되는 `전체 처리`에는 플러그인 내부 WAV 준비와 모델 로딩이 포함됩니다.
 - cold/warm 구간과 에너지 소비량은 아직 분리 측정하지 않습니다.

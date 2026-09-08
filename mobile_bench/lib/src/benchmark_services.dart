@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -11,6 +12,15 @@ const String _whisperRepositoryUrl =
     'https://huggingface.co/ggerganov/whisper.cpp/resolve/'
     '5359861c739e955e79d9a303bcbc70fb988958b1';
 
+const String _sherpaOnnxReleaseUrl =
+    'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models';
+
+/// Which native runtime a [ModelSpec] loads into. whisper.cpp models are a
+/// single GGML file; sherpa-onnx models are distributed as a `.tar.bz2`
+/// archive that must be extracted before use (see [ModelSpec.archiveModelFiles]
+/// and [ModelRepository.resolvedModelFiles]).
+enum SttEngineKind { whisperCpp, sherpaOnnxStreaming, sherpaOnnxOffline }
+
 class ModelSpec {
   const ModelSpec({
     required this.id,
@@ -19,9 +29,11 @@ class ModelSpec {
     required this.url,
     required this.sha256,
     required this.sizeBytes,
-    required this.whisperModel,
-    required this.quantization,
     required this.description,
+    this.engine = SttEngineKind.whisperCpp,
+    this.whisperModel,
+    this.quantization = '',
+    this.archiveModelFiles = const [],
   });
 
   final String id;
@@ -30,9 +42,20 @@ class ModelSpec {
   final String url;
   final String sha256;
   final int sizeBytes;
-  final WhisperModel whisperModel;
+  final SttEngineKind engine;
+
+  /// Only set for [SttEngineKind.whisperCpp] models.
+  final WhisperModel? whisperModel;
   final String quantization;
   final String description;
+
+  /// File names (no directory) that must exist after extracting the
+  /// downloaded archive, e.g. `encoder-epoch-99-avg-1.int8.onnx`. Empty for
+  /// whisper.cpp models, where [fileName] is the model file itself and no
+  /// extraction happens.
+  final List<String> archiveModelFiles;
+
+  bool get isArchive => archiveModelFiles.isNotEmpty;
 }
 
 const List<ModelSpec> modelCatalog = [
@@ -157,6 +180,37 @@ const List<ModelSpec> modelCatalog = [
     quantization: 'Q5_0',
     description: '최고 품질 비교용, 1GB 이상·고사양 기기 권장',
   ),
+  ModelSpec(
+    id: 'sherpa-onnx-streaming-zipformer-ko',
+    name: 'Sherpa-ONNX 한국어 스트리밍 Zipformer',
+    fileName: 'sherpa-onnx-streaming-zipformer-korean-2024-06-16.tar.bz2',
+    url:
+        '$_sherpaOnnxReleaseUrl/'
+        'sherpa-onnx-streaming-zipformer-korean-2024-06-16.tar.bz2',
+    sha256: 'e346a5882a409650472be17326237e24df7bf409db6b4a8a52e1a61422bf2500',
+    sizeBytes: 418218652,
+    engine: SttEngineKind.sherpaOnnxStreaming,
+    archiveModelFiles: [
+      'encoder-epoch-99-avg-1.int8.onnx',
+      'decoder-epoch-99-avg-1.int8.onnx',
+      'joiner-epoch-99-avg-1.int8.onnx',
+      'tokens.txt',
+    ],
+    description: '실시간 스트리밍 한국어 인식 (int8, encoder+decoder+joiner ≈132MB)',
+  ),
+  ModelSpec(
+    id: 'sherpa-onnx-sense-voice-int8',
+    name: 'Sherpa-ONNX SenseVoice Small (int8)',
+    fileName: 'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2',
+    url:
+        '$_sherpaOnnxReleaseUrl/'
+        'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2',
+    sha256: '7d1efa2138a65b0b488df37f8b89e3d91a60676e416f515b952358d83dfd347e',
+    sizeBytes: 163002883,
+    engine: SttEngineKind.sherpaOnnxOffline,
+    archiveModelFiles: ['model.int8.onnx', 'tokens.txt'],
+    description: '녹음 후 오프라인 다국어(중/영/일/한/월) 전사 (int8, ≈229MB)',
+  ),
 ];
 
 class DownloadedModel {
@@ -164,6 +218,20 @@ class DownloadedModel {
 
   final ModelSpec spec;
   final File file;
+}
+
+/// Common shape for a native STT runtime the app can benchmark.
+/// [WhisperBenchmarkEngine] (below) and `SherpaOnnxEngine`
+/// (`sherpa_engine.dart`) both implement this so [BenchmarkCoordinator] can
+/// run either one without caring which — see [ModelSpec.engine].
+abstract interface class SttBenchmarkEngine {
+  Future<BenchmarkResult> run({
+    required AudioSample sample,
+    required DownloadedModel model,
+    required int threads,
+    required void Function(int value) onProgress,
+    void Function()? onInferenceStarted,
+  });
 }
 
 /// Audio containers/codecs accepted by the bundled FFmpeg mobile runtime.
@@ -338,16 +406,62 @@ class ModelRepository {
     }
 
     final verification = await _verificationFile(model);
-    if (await verification.exists() &&
-        (await verification.readAsString()).trim() == model.sha256) {
-      return true;
-    }
+    final hashOk =
+        await verification.exists() &&
+        (await verification.readAsString()).trim() == model.sha256;
 
     // Migrates models downloaded by an older app version and catches a
     // same-sized but corrupt file. The marker avoids hashing on every launch.
-    if (await _sha256(file) != model.sha256) return false;
-    await verification.writeAsString(model.sha256, flush: true);
+    if (!hashOk) {
+      if (await _sha256(file) != model.sha256) return false;
+      await verification.writeAsString(model.sha256, flush: true);
+    }
+
+    if (model.isArchive) await _ensureExtracted(model, file);
     return true;
+  }
+
+  Future<Directory> _extractedDirectory(ModelSpec model) async {
+    final root = await _modelDirectory();
+    final directory = Directory('${root.path}/${model.id}_extracted');
+    await directory.create(recursive: true);
+    return directory;
+  }
+
+  /// Absolute paths of the files the native STT engine should open for
+  /// [model]. For whisper.cpp models this is just [modelFile]. For
+  /// sherpa-onnx models the downloaded file is a `.tar.bz2` archive, so this
+  /// extracts it (once) and returns the extracted [ModelSpec.archiveModelFiles]
+  /// instead.
+  Future<List<File>> resolvedModelFiles(ModelSpec model) async {
+    if (!model.isArchive) return [await modelFile(model)];
+    final directory = await _extractedDirectory(model);
+    return model.archiveModelFiles
+        .map((name) => File('${directory.path}/$name'))
+        .toList(growable: false);
+  }
+
+  /// Extracts [model]'s downloaded `.tar.bz2` archive into its own directory
+  /// the first time it's needed, skipping the (slow, pure-Dart) decode on
+  /// every later app launch once [ModelSpec.archiveModelFiles] are present.
+  Future<void> _ensureExtracted(ModelSpec model, File archiveFile) async {
+    final directory = await _extractedDirectory(model);
+    final wanted = model.archiveModelFiles.toSet();
+    final alreadyExtracted = await Future.wait(
+      wanted.map((name) => File('${directory.path}/$name').exists()),
+    );
+    if (alreadyExtracted.every((exists) => exists)) return;
+
+    final bytes = await archiveFile.readAsBytes();
+    final tarBytes = BZip2Decoder().decodeBytes(bytes);
+    final archive = TarDecoder().decodeBytes(tarBytes);
+    for (final entry in archive) {
+      if (!entry.isFile) continue;
+      final name = entry.name.split('/').last;
+      if (!wanted.contains(name)) continue;
+      final outFile = File('${directory.path}/$name');
+      await outFile.writeAsBytes(entry.content as List<int>, flush: true);
+    }
   }
 
   Future<List<DownloadedModel>> downloadedModels() async {
@@ -444,7 +558,8 @@ class ModelRepository {
   }
 }
 
-class WhisperBenchmarkEngine {
+class WhisperBenchmarkEngine implements SttBenchmarkEngine {
+  @override
   Future<BenchmarkResult> run({
     required AudioSample sample,
     required DownloadedModel model,
@@ -456,7 +571,7 @@ class WhisperBenchmarkEngine {
     final stopwatch = Stopwatch()..start();
     onInferenceStarted?.call();
     try {
-      final whisper = Whisper(model: model.spec.whisperModel);
+      final whisper = Whisper(model: model.spec.whisperModel!);
       final response = await whisper.transcribe(
         transcribeRequest: TranscribeRequest(
           audio: staged.file.path,

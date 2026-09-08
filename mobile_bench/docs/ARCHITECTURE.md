@@ -22,8 +22,8 @@ Flutter Benchmark Orchestrator
        │ Dart FFI
        ▼
 Native Engine Bridge
-├── whisper.cpp              # 최초 구현
-├── ONNX Runtime adapter     # 후속 후보
+├── whisper.cpp              # 최초 구현 (GGML)
+├── sherpa-onnx              # 두 번째 구현 (ONNX Runtime, 공식 Flutter 패키지)
 └── TFLite adapter           # 후속 후보
        │
        ▼
@@ -166,40 +166,39 @@ idle
 
 ## 6. 엔진 추상화
 
+실제 구현은 `benchmark_services.dart`의 다음 인터페이스를 두 엔진이 각각
+구현하는 형태입니다. 초기 설계 스케치보다 훨씬 얇습니다 — `AudioSample`/
+`DownloadedModel`/`BenchmarkResult`를 그대로 주고받아서, `BenchmarkCoordinator`
+와 그 이후(텔레메트리, 결과 저장/전송, 결과 화면)는 어떤 엔진이 실행됐는지
+전혀 몰라도 됩니다.
+
 ```dart
 abstract interface class SttBenchmarkEngine {
-  String get engineId;
-
-  Future<EngineInfo> initialize({
-    required String modelPath,
-    required RuntimeConfig config,
+  Future<BenchmarkResult> run({
+    required AudioSample sample,
+    required DownloadedModel model,
+    required int threads,
+    required void Function(int value) onProgress,
+    void Function()? onInferenceStarted,
   });
-
-  Future<TranscriptionResult> transcribe({
-    required String audioPath,
-  });
-
-  Future<void> dispose();
 }
 ```
 
-최초 구현은 `WhisperCppEngine` 하나로 시작합니다. 장시간 blocking FFI 호출은
-Flutter UI isolate가 아니라 전용 isolate에서 실행합니다.
+- `WhisperBenchmarkEngine` (`benchmark_services.dart`): `whisper_ggml` 플러그인을
+  통해 whisper.cpp를 호출합니다. FFI는 플러그인 내부에 캡슐화되어 있습니다.
+- `SherpaOnnxEngine` (`sherpa_engine.dart`): 공식 `sherpa_onnx` Flutter 패키지를
+  사용합니다. 벤더링된 C API 대신 pub.dev 패키지가 Android/iOS별 prebuilt
+  라이브러리를 그대로 제공하므로, whisper.cpp처럼 별도 네이티브 바인딩 코드를
+  직접 작성하지 않습니다. `ModelSpec.engine`에 따라
+  `sherpa_onnx.OnlineRecognizer`(스트리밍 Zipformer, 100ms 청크 입력)나
+  `sherpa_onnx.OfflineRecognizer`(SenseVoice, 파일 전체 한 번에 입력) 중 하나로
+  분기합니다.
+- `BenchmarkCoordinator._engineFor(ModelSpec)`가 `ModelSpec.engine` 값을 보고
+  둘 중 실행할 엔진을 고릅니다.
 
-네이티브 C API는 런타임 내부 타입을 Dart에 노출하지 않는 얇은 경계로 둡니다.
-
-```c
-typedef void * stt_context;
-
-stt_context stt_create(const char * config_json);
-int stt_load_model(stt_context context, const char * model_path);
-char * stt_transcribe_file(stt_context context, const char * audio_path);
-char * stt_get_metrics_json(stt_context context);
-void stt_free_string(char * value);
-void stt_destroy(stt_context context);
-```
-
-모든 반환 문자열의 소유권과 해제 함수를 API 계약에 명시합니다.
+sherpa-onnx 모델은 `.tar.bz2`로 배포되므로 `ModelRepository`가 다운로드+SHA-256
+검증까지는 whisper.cpp 모델과 동일하게 처리하고, 그 뒤 `archive` 패키지
+(순수 Dart BZip2/Tar 디코더)로 앱 저장소 안에서 한 번만 압축을 풉니다.
 
 ## 7. 플랫폼 테스트 자동화
 

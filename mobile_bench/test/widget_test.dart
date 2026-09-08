@@ -29,14 +29,24 @@ void main() {
   });
 
   test('model catalog has reproducible download metadata', () {
-    expect(modelCatalog.map((model) => model.id).toSet(), hasLength(11));
+    expect(modelCatalog.map((model) => model.id).toSet(), hasLength(13));
     for (final model in modelCatalog) {
       expect(model.url, startsWith('https://'));
       expect(model.sha256, hasLength(64));
       expect(model.sizeBytes, greaterThan(0));
-      expect(model.fileName, endsWith('.bin'));
-      expect(model.quantization, isNotEmpty);
       expect(model.description, isNotEmpty);
+      switch (model.engine) {
+        case SttEngineKind.whisperCpp:
+          expect(model.fileName, endsWith('.bin'));
+          expect(model.quantization, isNotEmpty);
+          expect(model.whisperModel, isNotNull);
+          expect(model.archiveModelFiles, isEmpty);
+        case SttEngineKind.sherpaOnnxStreaming:
+        case SttEngineKind.sherpaOnnxOffline:
+          expect(model.fileName, endsWith('.tar.bz2'));
+          expect(model.whisperModel, isNull);
+          expect(model.archiveModelFiles, isNotEmpty);
+      }
     }
   });
 
@@ -75,7 +85,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('모델 관리'), findsOneWidget);
-    expect(find.text('다운로드 완료 1 / 11'), findsOneWidget);
+    expect(find.text('다운로드 완료 1 / 13'), findsOneWidget);
     expect(find.text('Whisper Tiny Q5_1'), findsOneWidget);
     expect(find.text('Whisper Tiny Q8_0'), findsOneWidget);
     expect(find.text('Whisper Base Q5_1'), findsOneWidget);

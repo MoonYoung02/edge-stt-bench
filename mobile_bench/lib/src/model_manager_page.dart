@@ -244,7 +244,8 @@ class _ModelDownloadCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'GGML ${model.quantization} · ${formatBytes(model.sizeBytes)}',
+                        '${_engineLabel(model.engine)} · '
+                        '${formatBytes(model.sizeBytes)}',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 2),
@@ -284,5 +285,13 @@ class _ModelDownloadCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  static String _engineLabel(SttEngineKind engine) {
+    return switch (engine) {
+      SttEngineKind.whisperCpp => 'GGML',
+      SttEngineKind.sherpaOnnxStreaming => 'sherpa-onnx · streaming',
+      SttEngineKind.sherpaOnnxOffline => 'sherpa-onnx · offline',
+    };
   }
 }

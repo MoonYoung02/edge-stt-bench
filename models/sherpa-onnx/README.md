@@ -84,17 +84,24 @@ dependencies:
   archive: ^4.2.0        # 다운로드한 .tar.bz2를 폰 안에서 순수 Dart로 압축 해제하는 데 사용
 ```
 
-## 4. 남은 통합 작업 (아직 앱 코드에 반영 안 됨)
+## 4. 통합 상태 (2026-09-08 완료)
 
-1. `ModelSpec`에 엔진 구분 필드 추가 (whisper_cpp 단일파일 vs sherpa-onnx 아카이브)
-2. `ModelRepository.downloadModel()`이 검증 후 아카이브를 앱 저장소에 압축 해제하는
-   단계 추가 (`archive` 패키지의 `BZip2Decoder` + `TarDecoder`)
-3. `SherpaOnnxEngine` 작성 — 기존 `WhisperBenchmarkEngine.run()`과 동일하게
-   `BenchmarkResult`를 반환하도록 만들어서 UI/저장/전송 코드는 그대로 재사용
-   - 스트리밍(Zipformer): PCM을 청크로 나눠 `OnlineStream.acceptWaveform` 반복 호출
-   - 오프라인(SenseVoice): `OfflineStream`에 전체 파형을 한 번에 넣고 decode
-4. 모델 카탈로그에 위 두 엔트리 추가, 벤치마크 화면에서 엔진별 분기
-5. (선택) 스트리밍 전용 지표(첫 partial까지 시간 등) `BenchmarkResult`에 추가
-
-`mobile_bench`가 지금 다른 세션에서 batch 실행 기능으로 활발히 바뀌고 있어서
-(2026-09-08 저녁), 그 작업이 끝난 뒤 위 4단계를 이어서 진행하기로 함.
+1. ✅ `ModelSpec`에 `SttEngineKind` 필드 추가 (whisper_cpp 단일파일 vs
+   sherpa-onnx 아카이브), `archiveModelFiles`로 압축 해제 후 필요한 파일 목록 명시
+2. ✅ `ModelRepository.isDownloaded()`가 검증 후 아카이브를
+   `archive`(`BZip2Decoder`+`TarDecoder`) 패키지로 앱 저장소 안에서 압축 해제
+   (`resolvedModelFiles()`가 실제 사용할 절대 경로를 돌려줌)
+3. ✅ `SherpaOnnxEngine`(`mobile_bench/lib/src/sherpa_engine.dart`) 작성 —
+   `WhisperBenchmarkEngine`과 함께 공용 `SttBenchmarkEngine` 인터페이스를 구현,
+   `BenchmarkCoordinator._engineFor(ModelSpec)`가 엔진을 선택
+   - 스트리밍(Zipformer): 100ms 청크로 나눠 `OnlineStream.acceptWaveform` 반복 호출,
+     endpoint마다 구간 확정
+   - 오프라인(SenseVoice): 전체 파형을 한 번에 `OfflineStream`에 넣고 decode
+   - 현재 제약: 16kHz mono 16-bit PCM WAV 입력만 지원(모든 KCSC 샘플이 이 형식).
+     다른 포맷은 whisper.cpp처럼 FFmpeg로 자동 정규화되지 않고 오류 발생
+4. ✅ 모델 카탈로그에 두 엔트리 추가, `flutter analyze`/`flutter test`/
+   `flutter build apk --release` 모두 통과 확인 (APK 820.4MB, arm64 release)
+5. ⏳ (미착수) 스트리밍 전용 지표(첫 partial까지 시간 등)는 `BenchmarkResult`에
+   아직 없음 — 필요하면 다음 단계로 추가
+6. ⏳ (미착수) 실제 기기(S21/A36) 실행 검증, CER/WER를 위한 데스크톱 `sttbench`
+   쪽 importer

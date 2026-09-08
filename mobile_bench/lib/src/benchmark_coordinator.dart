@@ -9,24 +9,35 @@ import 'benchmark_run.dart';
 import 'benchmark_services.dart';
 import 'platform_bridge.dart';
 import 'result_repository.dart';
+import 'sherpa_engine.dart';
 import 'telemetry_sampler.dart';
 
-/// Thermal statuses at or above this severity pause the batch runner before
-/// the next sample starts (see [BenchmarkCoordinator._waitForSafeThermalState]).
+/// Thermal statuses at or above this severity get an entry's
+/// `thermalThrottled` flag set (see [BenchmarkCoordinator._recordThermalState])
+/// so a hot measurement can be spotted later — the batch itself never pauses
+/// for it.
 const int _batchThermalPauseThreshold = 5; // 'serious' in [thermalStatusOrder]
 
 class BenchmarkCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   BenchmarkCoordinator({
     ResultRepository? results,
     PlatformBridge? platform,
-    WhisperBenchmarkEngine? engine,
+    WhisperBenchmarkEngine? whisperEngine,
+    SherpaOnnxEngine? sherpaEngine,
   }) : results = results ?? ResultRepository(),
        platform = platform ?? PlatformBridge(),
-       _engine = engine ?? WhisperBenchmarkEngine();
+       _whisperEngine = whisperEngine ?? WhisperBenchmarkEngine(),
+       _sherpaEngine = sherpaEngine ?? SherpaOnnxEngine();
 
   final ResultRepository results;
   final PlatformBridge platform;
-  final WhisperBenchmarkEngine _engine;
+  final WhisperBenchmarkEngine _whisperEngine;
+  final SherpaOnnxEngine _sherpaEngine;
+
+  /// whisper.cpp and sherpa-onnx models are two separate native runtimes;
+  /// [ModelSpec.engine] says which one a given [DownloadedModel] needs.
+  SttBenchmarkEngine _engineFor(ModelSpec spec) =>
+      spec.engine == SttEngineKind.whisperCpp ? _whisperEngine : _sherpaEngine;
 
   BenchmarkRun? _activeRun;
   BenchmarkRun? _latestRun;
@@ -122,7 +133,7 @@ class BenchmarkCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         (_) => _queueCheckpoint(run),
       );
 
-      final result = await _engine.run(
+      final result = await _engineFor(model.spec).run(
         sample: sample,
         model: model,
         threads: threads,
@@ -237,12 +248,7 @@ class BenchmarkCoordinator extends ChangeNotifier with WidgetsBindingObserver {
         continue;
       }
 
-      await _waitForSafeThermalState(entry);
-      if (_batchCancelRequested) {
-        entry.status = BenchmarkBatchEntryStatus.skipped;
-        await results.saveBatch(batch);
-        continue;
-      }
+      await _recordThermalState(entry);
 
       entry.status = BenchmarkBatchEntryStatus.running;
       await results.saveBatch(batch);
@@ -301,29 +307,16 @@ class BenchmarkCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     if (isRunning) await requestCancel();
   }
 
-  /// Pauses before the next batch sample while the device thermal status is
-  /// at or above `serious` (docs/BENCHMARK_PROTOCOL.md §3: "각 반복 시작 전
-  /// thermal 상태를 확인하고 심각한 throttling 상태면 대기하거나 해당 반복을
-  /// invalid로 표시"). Gives up after ~2 minutes and flags the entry instead
-  /// of blocking the batch forever, so the desktop importer can exclude a
-  /// throttled measurement instead of trusting a skewed RTF.
-  Future<void> _waitForSafeThermalState(BenchmarkBatchEntry entry) async {
-    const maxAttempts = 12;
-    const interval = Duration(seconds: 10);
-    for (var attempt = 0; attempt < maxAttempts; attempt++) {
-      if (_batchCancelRequested) return;
-      final snapshot = await platform.metricsSnapshot();
-      final status = snapshot['thermalStatus'] as String?;
-      entry.thermalStatusAtStart = status;
-      if (thermalSeverityIndex(status) < _batchThermalPauseThreshold) {
-        entry.thermalThrottled = false;
-        return;
-      }
-      entry.thermalThrottled = true;
-      _status = '발열 상태($status) 완화 대기 중 (${attempt + 1}/$maxAttempts)';
-      notifyListeners();
-      await Future.delayed(interval);
-    }
+  /// Records the device thermal status right before a batch sample starts,
+  /// without pausing for it — a batch that keeps stopping to wait out heat
+  /// is worse than one that finishes with a few samples flagged as measured
+  /// hot. `entry.thermalThrottled` still lets the desktop importer exclude
+  /// or call out a throttled sample's RTF instead of trusting it blindly.
+  Future<void> _recordThermalState(BenchmarkBatchEntry entry) async {
+    final snapshot = await platform.metricsSnapshot();
+    final status = snapshot['thermalStatus'] as String?;
+    entry.thermalStatusAtStart = status;
+    entry.thermalThrottled = thermalSeverityIndex(status) >= _batchThermalPauseThreshold;
   }
 
   Future<void> requestCancel() async {
