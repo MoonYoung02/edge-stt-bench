@@ -44,7 +44,7 @@ void main() {
   });
 
   test('model catalog has reproducible download metadata', () {
-    expect(modelCatalog.map((model) => model.id).toSet(), hasLength(13));
+    expect(modelCatalog.map((model) => model.id).toSet(), hasLength(14));
     for (final model in modelCatalog) {
       expect(model.url, startsWith('https://'));
       expect(model.sha256, hasLength(64));
@@ -64,6 +64,29 @@ void main() {
       }
     }
   });
+
+  test(
+    'the no-context experiment variant shares its file with the base model '
+    'but has a distinct id and only differs by whisperNoContext',
+    () {
+      final base = modelCatalog.firstWhere(
+        (model) => model.id == 'whisper-small-q8_0',
+      );
+      final experiment = modelCatalog.firstWhere(
+        (model) => model.id == 'whisper-small-q8_0-no-context',
+      );
+
+      expect(experiment.id, isNot(base.id));
+      expect(base.whisperNoContext, isFalse);
+      expect(experiment.whisperNoContext, isTrue);
+      // Same physical GGML file: downloading either entry satisfies both,
+      // and BenchmarkCoordinator.runBatch's already-covered-sample skip
+      // (keyed on id) still tells the two apart correctly.
+      expect(experiment.fileName, base.fileName);
+      expect(experiment.sha256, base.sha256);
+      expect(experiment.sizeBytes, base.sizeBytes);
+    },
+  );
 
   test('formats predictions like the reference transcript rows', () {
     final output = formatPredictionTranscript(
@@ -100,7 +123,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('모델 관리'), findsOneWidget);
-    expect(find.text('다운로드 완료 1 / 13'), findsOneWidget);
+    expect(find.text('다운로드 완료 1 / 14'), findsOneWidget);
     expect(find.text('Whisper Tiny Q5_1'), findsOneWidget);
     expect(find.text('Whisper Tiny Q8_0'), findsOneWidget);
     expect(find.text('Whisper Base Q5_1'), findsOneWidget);

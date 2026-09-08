@@ -45,6 +45,7 @@ class ModelSpec {
     this.whisperModel,
     this.quantization = '',
     this.archiveModelFiles = const [],
+    this.whisperNoContext = false,
   });
 
   final String id;
@@ -59,6 +60,23 @@ class ModelSpec {
   final WhisperModel? whisperModel;
   final String quantization;
   final String description;
+
+  /// Sets `TranscribeRequest.noContext` for [SttEngineKind.whisperCpp] runs
+  /// of this model — whisper.cpp then decodes each internal segment fresh,
+  /// without the previous segment's text as conditioning. Default `false`
+  /// matches whisper.cpp's own default (context carries over).
+  ///
+  /// KCSC audio concatenates many unrelated labeled utterances into one
+  /// file (see docs/DATASET.md), so the default's carried-over context can
+  /// bias a segment's decode toward a completely unrelated prior sentence —
+  /// a failure mode `whisper_ggml`'s own `TranscribeRequest.noContext` doc
+  /// comment calls out by name (repetition/hallucination toward a "tail of
+  /// utterance" attractor). A `-no-context` catalog variant exists to A/B
+  /// this against the same model's default-context entry, since it changes
+  /// decoding behavior rather than the model file itself, and the two must
+  /// stay distinguishable to `BenchmarkCoordinator.runBatch`'s
+  /// already-covered-sample skip (keyed on [id], not on this flag).
+  final bool whisperNoContext;
 
   /// File names (no directory) that must exist after extracting the
   /// downloaded archive, e.g. `encoder-epoch-99-avg-1.int8.onnx`. Empty for
@@ -135,6 +153,23 @@ const List<ModelSpec> modelCatalog = [
     whisperModel: WhisperModel.small,
     quantization: 'Q8_0',
     description: 'Small 고정밀 양자화 모델',
+  ),
+  ModelSpec(
+    id: 'whisper-small-q8_0-no-context',
+    name: 'Whisper Small Q8_0 (no-context 실험)',
+    // Same physical GGML file as whisper-small-q8_0 — the app only
+    // downloads it once, both catalog entries share it on disk.
+    fileName: 'ggml-small-q8_0.bin',
+    url: '$_whisperRepositoryUrl/ggml-small-q8_0.bin',
+    sha256: '49c8fb02b65e6049d5fa6c04f81f53b867b5ec9540406812c643f177317f779f',
+    sizeBytes: 264464607,
+    whisperModel: WhisperModel.small,
+    quantization: 'Q8_0',
+    whisperNoContext: true,
+    description:
+        'whisper-small-q8_0과 같은 모델, TranscribeRequest.noContext만 켬. '
+        'KCSC처럼 서로 무관한 발화가 이어붙은 오디오에서 이전 구간 문맥이 '
+        '반복/환각을 유발하는지 A/B 비교용',
   ),
   ModelSpec(
     id: 'whisper-medium-q5_0',
@@ -602,6 +637,7 @@ class WhisperBenchmarkEngine implements SttBenchmarkEngine {
           threads: threads,
           isNoTimestamps: false,
           isRealtime: true,
+          noContext: model.spec.whisperNoContext,
         ),
         modelPath: model.file.path,
         onProgress: onProgress,
