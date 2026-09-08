@@ -14,7 +14,9 @@ Firebase Test Lab 실행 코드와 모바일 벤치마크 문서를 함께 관�
 - 저장소 `data/`의 음성 23개와 KCSC 정답 TXT 22개를 앱 asset으로 포함
 - WAV, M4A, MP3, FLAC, OGG/OPUS, AAC, MP4, WebM 등 일반적인 오디오 입력을
   FFmpeg로 16 kHz mono PCM WAV로 정규화
-- 내장 오디오 한 개 선택
+- 내장 오디오 한 개를 선택하는 수동 실행
+- 정답 TXT가 있는 KCSC 샘플 전체를 한 모델로 순차 실행하는 자동 벤치마크
+- 같은 모델·샘플의 완료 결과 재사용과 자동 벤치마크 이력 조회
 - CPU thread 수 선택
 - 모델 관리 화면에서 다국어 Whisper 모델 11종을 개별 다운로드·검증·삭제
 - SHA-256 검증이 끝난 모델만 벤치마크 화면에서 선택
@@ -27,6 +29,7 @@ Firebase Test Lab 실행 코드와 모바일 벤치마크 문서를 함께 관�
 - 등록한 HTTPS 서버로 결과 JSON 전송(Bearer token은 secure storage에 보관)
 - Android Downloads 내보내기와 ADB pull
 - Android foreground service + partial wake lock으로 화면 꺼짐/앱 화면 이탈 중 실행
+- 샘플별 발열 상태 기록과 실패 후 다음 샘플 계속 실행
 
 현재 MVP는 `whisper_ggml` 2.6.0 소스를 `packages/whisper_ggml/`에 포함해
 사용합니다. upstream Android 설정의 compileSdk 충돌을 피하기 위해 로컬 패키지는
@@ -52,6 +55,14 @@ build/app/outputs/flutter-apk/app-release.apk
 돌아오면 다운로드가 완료된 모델만 선택 목록에 나타납니다. 모델, 오디오와 thread
 수를 고른 뒤 `벤치마크 시작`을 누르면 됩니다. 검증된 모델은 앱 내부 저장소에서
 재사용합니다.
+
+정답이 있는 KCSC 전체를 측정하려면 홈 화면의 `자동 벤치마크`를 엽니다. 모델과
+thread 수를 고르면 22개 샘플을 차례대로 실행합니다. 동일한 모델로 이미 완료한
+샘플은 기존 결과를 재사용하고 나머지만 실행하므로, 중단된 측정을 보충하거나 새
+샘플을 추가한 뒤 다시 실행하기 쉽습니다. 한 샘플이 실패해도 다음 샘플은 계속
+실행되며, 실행 직전 발열 상태가 높은 샘플은 결과에 표시됩니다. 진행 중인 자동
+벤치마크는 취소할 수 있고, 완료된 배치는 `자동 벤치마크 이력`에서 다시 확인할 수
+있습니다.
 
 모델 출력은 정답 데이터와 동일한 4열 형식으로 표시합니다.
 
@@ -103,7 +114,66 @@ whisper.cpp처럼 FFmpeg로 자동 정규화되지 않고 오류로 표시됩니
 ```
 
 디버그 APK에서는 앱 내부 결과를 바로 가져오며, release APK에서는 결과 화면의
-내보내기를 먼저 누르면 Downloads 폴더에서 가져옵니다.
+내보내기를 먼저 누르면 Downloads 폴더에서 가져옵니다. 결과가 많이 쌓였을 때
+최근 것만 가져오려면 `--recent N`을 앞에 붙입니다(기기 쪽 수정 시각 기준 최신
+N개).
+
+```bash
+./tools/pull_benchmark_results.sh --recent 5 R3CRC0LMBTJ ./benchmark-results
+```
+
+기기 시리얼을 생략하면(빈 문자열 `""`) 연결된 첫 번째 기기를 자동으로 씁니다.
+`watch_benchmark_results.sh`도 동일한 인자를 그대로 받습니다.
+
+### 모바일 결과 채점과 변환
+
+가져온 자동 벤치마크 JSON의 CER/WER와 RTF 요약만 만들려면 다음 명령을
+사용합니다. 같은 `runId`의 파일이 여러 번 내보내졌다면 첫 번째 파일만 사용합니다.
+
+```bash
+python3 tools/mobile_result_importer.py ./benchmark-results \
+  --output ./benchmark-results/scored
+```
+
+모바일 결과를 데스크톱 `sttbench`의 `runs/`와 같은 구조로 변환하려면 다음 명령을
+사용합니다. 배치 자동 실행이든 수동 단일 실행이든 파일 하나마다 각각 독립된 실행
+폴더가 됩니다(`batchId`로 묶지 않습니다). 어느 배치에서 나온 샘플인지는 각 실행의
+`run.json`의 `mobile_source.batch_id`에 그대로 남습니다.
+
+```bash
+python3 tools/mobile_to_runs.py ./benchmark-results \
+  --runs-dir ../runs
+```
+
+`./benchmark-results`에 예전 실행까지 계속 쌓여 있어 방금 가져온 것만 변환하고
+싶다면 `--recent N`으로 파일 수정 시각 기준 최신 N개만 골라 변환합니다. 파일마다
+독립된 실행 폴더가 되므로 배치 일부만 골라도 "일부가 빠진 실행"이 생기지 않습니다.
+
+```bash
+python3 tools/mobile_to_runs.py ./benchmark-results --recent 5 --runs-dir ../runs
+```
+
+두 도구 모두 데스크톱과 동일한 텍스트 정규화 및 CER/WER 구현을 재사용합니다.
+`mobile_result_importer.py`는 빠른 배치 요약용이고, `mobile_to_runs.py`는 샘플별
+`prediction.json`, `comparison.json`, `summary.json`까지 만들어 데스크톱 결과와
+나란히 비교할 때 사용합니다.
+
+`mobile_to_runs.py`가 파일마다 독립된 실행 폴더를 만들기 때문에, 같은 모델을 여러
+번(또는 여러 세션에 걸쳐) 돌린 결과를 하나의 요약으로 다시 합치려면
+`summarize_recent_runs.py`를 사용합니다. 각 실행의 `run.json`에 적힌 `started_at`
+기준으로 가장 최근 N개를 골라 데스크톱과 동일한 `# KCSC ASR 평가 요약` 형식의
+markdown 하나로 합칩니다.
+
+```bash
+python3 tools/summarize_recent_runs.py --recent 15
+# 특정 모델만: --model whisper-small-q8_0-no-context
+# 저장 경로 지정: --output ./benchmark-results/recent-15-summary.md
+```
+
+`--runs-dir`를 생략하면 `mobile_bench/benchmark-results/runs`를 보고, `--output`을
+생략하면 `benchmark-results/recent-<N>[-<모델>]-summary.md`에 저장하면서 화면에도
+그대로 출력합니다. `--model`을 생략하면 폴더 안의 모든 모델을 다 합치므로, 여러
+모델이 섞여 있을 때는 `--model`로 좁히는 걸 권장합니다.
 
 ### Mac 로컬 서버로 바로 업로드
 
@@ -158,7 +228,7 @@ ADB 로컬 주소에만 허용합니다.
 
 ## 프로젝트 구조
 
-Flutter 프로젝트를 생성하면 이 디렉터리를 다음과 같이 확장합니다.
+현재 주요 구성은 다음과 같습니다.
 
 ```text
 mobile_bench/
@@ -167,12 +237,17 @@ mobile_bench/
 ├── lib/
 │   ├── main.dart
 │   └── src/
-│       ├── benchmark_home_page.dart
-│       └── benchmark_services.dart
+│       ├── benchmark_home_page.dart       # 수동 실행 홈
+│       ├── benchmark_batch_page.dart      # 전체 자동 실행과 진행 상태
+│       ├── benchmark_coordinator.dart     # 단일/배치 실행 조율
+│       ├── benchmark_services.dart        # 모델·데이터·whisper.cpp 엔진
+│       ├── sherpa_engine.dart             # sherpa-onnx 엔진
+│       └── result_repository.dart         # 실행 및 배치 JSON 저장
 ├── packages/
 │   └── whisper_ggml/           # 로컬로 고정한 whisper.cpp Flutter 플러그인
 ├── assets/
 │   └── data -> ../../data      # 원본 data/를 가리키는 asset 링크
+├── tools/                       # 결과 수집·채점·변환 도구
 ├── test/
 ├── android/                    # 유일한 모바일 대상 플랫폼
 └── pubspec.yaml
@@ -186,34 +261,29 @@ mobile_bench/
 - 모델 카탈로그는 whisper.cpp GGML 다국어 모델과 sherpa-onnx 한국어 스트리밍
   Zipformer/SenseVoice int8 두 종으로 구성됩니다. sherpa-onnx 두 모델은 현재
   16kHz mono WAV 입력만 지원합니다.
-- 1회 실행만 지원하며 batch/shard와 자동 Job 실행은 아직 없습니다.
+- 수동 단일 실행과 정답이 있는 전체 샘플 자동 실행을 지원합니다. 임의 샘플 집합,
+  duration 기반 shard, warmup/반복 횟수 지정과 `jobId` 기반 무인 실행은 아직
+  지원하지 않습니다.
 - 표시되는 `전체 처리`에는 플러그인 내부 WAV 준비와 모델 로딩이 포함됩니다.
 - cold/warm 구간과 에너지 소비량은 아직 분리 측정하지 않습니다.
+- 데이터셋은 아직 명시적인 버전/hash manifest 대신 Flutter `AssetManifest`에서
+  파일을 찾습니다.
 - 지원 목록 밖의 특수 codec이나 손상된 파일은 FFmpeg 변환 오류로 표시됩니다.
 - Android 설정에서 앱을 강제 중지하거나 Android 13+ Active apps의 `Stop`을 누르면
   OS 정책상 실행을 계속할 수 없습니다.
 - 모바일 앱은 Android만 지원합니다.
 
-## 장기 MVP 완료 조건
+## 장기 MVP 완료 조건과 현재 상태
 
 첫 번째 MVP는 다음 조건을 만족해야 합니다.
 
-1. Android 앱에서 `whisper.cpp` GGML 모델을 로드할 수 있다.
-2. `data/`에 포함된 지원 오디오 중 지정된 sample 또는 shard를 실행할 수 있다.
-3. 모델은 URL에서 다운로드하고 SHA-256을 검증한다.
-4. 모델 로딩 시간, 전처리 시간, 추론 시간, RTF와 Peak RAM을 기록한다.
-5. transcript와 재현 정보를 결과 JSON으로 저장한다.
-6. Android 실제 기기에서 수동 실행과 자동 실행이 모두 가능하다.
-7. Firebase Test Lab에서 `jobId`를 전달해 UI 조작 없이 실행할 수 있다.
-8. 생성된 모바일 결과를 기존 `sttbench`에서 읽고 CER/WER를 계산할 수 있다.
-
-## 구현 순서
-
-1. Android Flutter 프로젝트 생성
-2. 네이티브 엔진 연결
-3. asset 목록과 선택 파일 staging 구현
-4. 단일 WAV/단일 GGML 모델 수동 벤치마크 구현
-5. 메모리 및 기기 정보 수집 구현
-6. 결과 JSON 저장과 기존 `sttbench` importer 구현
-7. Android Firebase Test Lab 자동 실행 연결
-8. 모델 및 STT 엔진 확장
+1. 완료 — Android에서 `whisper.cpp` GGML과 sherpa-onnx 모델을 로드합니다.
+2. 부분 완료 — 단일 sample과 정답이 있는 전체 sample을 실행하며 shard는 남아
+   있습니다.
+3. 완료 — 모델을 URL에서 다운로드하고 크기와 SHA-256을 검증합니다.
+4. 부분 완료 — 전체 처리 시간, RTF, CPU/RAM/thermal을 기록하며 cold/warm 및
+   세부 측정 경계 분리는 남아 있습니다.
+5. 완료 — transcript, 모델·기기·런타임 정보와 telemetry를 JSON으로 저장합니다.
+6. 완료 — Android 실제 기기에서 수동 실행과 앱 내 자동 순차 실행이 가능합니다.
+7. 미완료 — Firebase Test Lab의 `jobId` 기반 무인 실행이 남아 있습니다.
+8. 완료 — 결과 importer와 변환기가 기존 `sttbench` 구현으로 CER/WER를 계산합니다.
