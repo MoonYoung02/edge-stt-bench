@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "run_id": "whisper-small-q8_0-no-context__kcsc__android-SM-G991N__20260908-155758-747",
+  "status": "completed",
+  "command": "mobile-import",
+  "dataset": "kcsc",
+  "dataset_root": null,
+  "model": "whisper-small-q8_0-no-context",
+  "adapter": "mobile_bench",
+  "checkpoint": "whisper-small-q8_0-no-context",
+  "requested_device": "android-SM-G991N",
+  "language": "ko",
+  "limit": 1,
+  "started_at": "2026-09-08T15:57:58+00:00",
+  "resumed_at": null,
+  "platform": "android samsung SM-G991N (Android 15 (API 35))",
+  "python": null,
+  "finished_at": "2026-09-08T16:10:22+00:00",
+  "actual_devices": [
+    "android-SM-G991N"
+  ],
+  "summary": "/Users/moonyoung/whisper/mobile_bench/benchmark-results/runs/whisper-small-q8_0-no-context__kcsc__android-SM-G991N__20260908-155758-747/summary.json",
+  "mobile_source": {
+    "batch_id": "whisper-small-q8_0-no-context-20260908T155758713859-b84a43",
+    "threads": 6,
+    "device": {
+      "platform": "android",
+      "manufacturer": "samsung",
+      "model": "SM-G991N",
+      "osVersion": "Android 15 (API 35)",
+      "logicalCpuCores": 8,
+      "totalMemoryBytes": 7550722048
+    }
+  }
+}

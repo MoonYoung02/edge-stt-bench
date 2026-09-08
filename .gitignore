@@ -17,5 +17,10 @@ __pycache__/
 !/models/sherpa-onnx/*.md
 
 # 모바일 벤치마크 실행 결과물 (기기별 산출물, runs/와 동일한 이유로 제외)
-/mobile_bench/benchmark-results/
+# 단, 컨텍스트 비활성화 비교 실험 결과는 버전 관리한다.
+/mobile_bench/benchmark-results/*
+!/mobile_bench/benchmark-results/runs/
+/mobile_bench/benchmark-results/runs/*
+!/mobile_bench/benchmark-results/runs/*no-context*/
+!/mobile_bench/benchmark-results/runs/*no-context/**
 /mobile_bench/received-benchmark-results/

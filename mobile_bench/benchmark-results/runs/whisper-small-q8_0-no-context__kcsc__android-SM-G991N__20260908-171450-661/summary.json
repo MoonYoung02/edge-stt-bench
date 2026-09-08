@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "run_id": "whisper-small-q8_0-no-context__kcsc__android-SM-G991N__20260908-171450-661",
+  "status": "completed",
+  "dataset": "kcsc",
+  "model": "whisper-small-q8_0-no-context",
+  "requested_device": "android-SM-G991N",
+  "actual_devices": [
+    "android-SM-G991N"
+  ],
+  "language": "ko",
+  "total_samples": 1,
+  "completed_samples": 1,
+  "failed_samples": 0,
+  "total_audio_seconds": 906.239,
+  "total_transcribe_seconds": 648.555,
+  "model_load_seconds": 0.0,
+  "total_seconds": 648.555,
+  "rtf": 0.7156555831298366,
+  "cer": {
+    "micro": 0.12521150592216582,
+    "macro": 0.12521150592216582,
+    "median": 0.12521150592216582,
+    "errors": 296,
+    "reference_units": 2364
+  },
+  "wer": {
+    "micro": 0.2799208704253215,
+    "macro": 0.2799208704253215,
+    "median": 0.2799208704253215,
+    "errors": 283,
+    "reference_units": 1011
+  },
+  "samples": [
+    {
+      "sample_id": "A0055_S0006_0_G0110",
+      "status": "completed",
+      "device": "android-SM-G991N",
+      "audio_seconds": 906.239,
+      "transcribe_seconds": 648.555,
+      "model_load_seconds": 0.0,
+      "character_errors": 296,
+      "reference_characters": 2364,
+      "cer": 0.12521150592216582,
+      "word_errors": 283,
+      "reference_words": 1011,
+      "wer": 0.2799208704253215
+    }
+  ]
+}
