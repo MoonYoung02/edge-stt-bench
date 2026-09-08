@@ -45,13 +45,14 @@ class BenchmarkForegroundService : Service() {
         progress = 0
         val currentNotification = notification(false)
         when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM -> {
-                startForeground(
-                    NOTIFICATION_ID,
-                    currentNotification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING,
-                )
-            }
+            // `specialUse`, not `mediaProcessing`: Android 15 enforces a
+            // system-wide cumulative daily execution budget on the
+            // `dataSync`/`mediaProcessing` FGS types (Service.onTimeout()
+            // fires once it's spent, forcing this service to stop — that
+            // showed up as batches getting cut off earlier and earlier
+            // through a day of repeated benchmark runs). `specialUse` is not
+            // one of the time-limited types on this Android version, so a
+            // long-running batch isn't budget-capped the same way.
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> {
                 startForeground(
                     NOTIFICATION_ID,
