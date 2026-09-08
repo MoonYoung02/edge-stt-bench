@@ -119,7 +119,8 @@ class _BenchmarkBatchPageState extends State<BenchmarkBatchPage> {
             if (!readOnly) ...[
               Text(
                 '정답 텍스트가 있는 샘플 ${_labeledSamples.length}개를 선택한 '
-                '모델로 순서대로 실행합니다. 발열이 심하면 자동으로 대기합니다.',
+                '모델로 순서대로 실행합니다. 발열이 심해도 멈추지 않고 계속 '
+                '진행하며, 그런 샘플은 결과에 표시만 남깁니다.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 12),
