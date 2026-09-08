@@ -104,7 +104,7 @@ class BenchmarkForegroundService : Service() {
 
         if (completed) {
             builder
-                .setContentTitle(if (success) "STT 벤치마크 완료" else "STT 벤치마크 종료")
+                .setContentTitle(if (success) "EdgeSTT 벤치마크 완료" else "EdgeSTT 벤치마크 종료")
                 .setContentText("앱에서 결과를 확인하세요")
                 .setAutoCancel(true)
         } else {
@@ -115,7 +115,7 @@ class BenchmarkForegroundService : Service() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             builder
-                .setContentTitle("STT 벤치마크 실행 중")
+                .setContentTitle("EdgeSTT 벤치마크 실행 중")
                 .setContentText(subtitle)
                 .setProgress(100, progress, false)
                 .addAction(
@@ -137,7 +137,7 @@ class BenchmarkForegroundService : Service() {
                 "벤치마크 실행",
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
-                description = "백그라운드 STT 벤치마크 진행 상태"
+                description = "백그라운드 EdgeSTT 벤치마크 진행 상태"
                 setSound(null, null)
             },
         )

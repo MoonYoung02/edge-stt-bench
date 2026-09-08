@@ -1,4 +1,4 @@
-# STT Mobile Benchmark App
+# EdgeSTT Mobile Bench
 
 Android 실제 기기에서 로컬 STT 모델의 속도, 메모리 사용량, 안정성을
 반복 측정하기 위한 Flutter 앱 프로젝트입니다.
@@ -18,9 +18,10 @@ Firebase Test Lab 실행 코드와 모바일 벤치마크 문서를 함께 관�
 - 정답 TXT가 있는 KCSC 샘플 전체를 한 모델로 순차 실행하는 자동 벤치마크
 - 같은 모델·샘플의 완료 결과 재사용과 자동 벤치마크 이력 조회
 - CPU thread 수 선택
-- 모델 관리 화면에서 다국어 Whisper 모델 11종을 개별 다운로드·검증·삭제
+- 모델 관리 화면에서 다국어 Whisper 모델 12종(문맥 전달을 끈 no-context A/B
+  실험 변형 포함)과 Sherpa-ONNX 모델 2종을 개별 다운로드·검증·삭제
 - SHA-256 검증이 끝난 모델만 벤치마크 화면에서 선택
-- Android 네이티브 `whisper.cpp` 추론
+- Android 네이티브 `whisper.cpp`와 `sherpa-onnx` 두 엔진으로 추론
 - 실행 완료 즉시 정답 TXT 유무와 무관하게 별도 결과 화면 표시
 - 전체 처리 시간, RTF, segment 수와 timestamp 기반 transcript 표시
 - KCSC sample은 대응하는 정답 TXT도 함께 표시
@@ -84,16 +85,19 @@ KCSC 정답이 있으면 해당 화자ID와 성별을 사용하고, 정답이 �
 | Whisper Base Q8_0 | 81.8MB |
 | Whisper Small Q5_1 | 190.1MB |
 | Whisper Small Q8_0 | 264.5MB |
+| Whisper Small Q8_0 (no-context 실험) | 264.5MB (Small Q8_0과 같은 파일) |
 | Whisper Medium Q5_0 | 539.2MB |
 | Whisper Medium Q8_0 | 823.4MB |
 | Whisper Large V3 Turbo Q5_0 | 574.0MB |
 | Whisper Large V3 Turbo Q8_0 | 874.2MB |
 | Whisper Large V3 Q5_0 | 1,081.1MB |
-| Sherpa-ONNX 한국어 스트리밍 Zipformer | 132.4MB |
-| Sherpa-ONNX SenseVoice Small (int8) | 229.5MB |
+| Sherpa-ONNX 한국어 스트리밍 Zipformer | 418.2MB (압축 해제 후 encoder+decoder+joiner ≈132MB) |
+| Sherpa-ONNX SenseVoice Small (int8) | 163.0MB (압축 해제 후 ≈229MB) |
 
 500MB 이상 모델은 다운로드 전에 저장공간과 RAM 안내를 표시합니다. 모두 한국어를
 지원하는 다국어 모델이며 영어 전용 `.en` 모델은 현재 카탈로그에서 제외했습니다.
+크기는 전부 다운로드하는 파일 자체의 크기이고, Sherpa-ONNX 두 모델만 압축
+해제 후 실제 사용하는 파일 크기가 따로 있어 괄호로 병기했습니다.
 
 Whisper 계열은 `whisper.cpp`(GGML, 단일 파일) 엔진으로, Sherpa-ONNX 두 모델은
 `sherpa-onnx`(ONNX Runtime, `.tar.bz2`로 배포되어 앱이 내부에서 압축 해제) 엔진으로
@@ -102,6 +106,13 @@ Whisper 계열은 `whisper.cpp`(GGML, 단일 파일) 엔진으로, Sherpa-ONNX �
 동작합니다. 두 sherpa-onnx 모델 모두 현재는 16kHz mono 16-bit PCM WAV 입력만
 지원합니다(KCSC 샘플은 전부 이 형식). 다른 포맷/샘플레이트 입력은 아직
 whisper.cpp처럼 FFmpeg로 자동 정규화되지 않고 오류로 표시됩니다.
+
+`Whisper Small Q8_0 (no-context 실험)`은 별도 다운로드가 아니라 Small Q8_0과
+같은 GGML 파일을 공유하는 디코딩 옵션 변형입니다. whisper.cpp는 기본적으로
+직전 구간의 전사를 다음 구간 디코딩의 문맥으로 넘기는데, KCSC 오디오는 서로
+무관한 발화를 이어붙인 파일이라 이 문맥이 반복·환각(같은 문장을 계속
+되풀이하는 현상)을 유발하는 경우가 있습니다. 이 항목은 문맥 전달을 끄고 같은
+모델을 다시 실행해 그 영향을 A/B로 비교하기 위한 것입니다.
 
 현재 `data/` 전체를 포함한 ARM64 release APK 크기는 약 710MB입니다.
 
@@ -180,7 +191,7 @@ python3 tools/summarize_recent_runs.py --recent 15
 추가 패키지 없이 Python 수신 서버를 실행할 수 있습니다.
 
 ```bash
-cd /Users/moonyoung/whisper/mobile_bench
+cd mobile_bench
 ./tools/result_receiver.py --port 8787 --output ./received-benchmark-results
 ```
 
@@ -226,6 +237,10 @@ ADB 로컬 주소에만 허용합니다.
 - [벤치마크 규약](docs/BENCHMARK_PROTOCOL.md): 측정 경계, 반복 조건, 지표와 결과 스키마
 - [백그라운드·계측·전송](docs/BACKGROUND_MONITORING_AND_TRANSFER.md): 플랫폼 동작, 지표 정의, 서버/USB 사용법
 
+아키텍처 문서의 `jobId`/Firebase Test Lab 무인 실행과 벤치마크 규약 문서의
+warmup·반복 측정·cold/warm 분리 스키마는 목표로 삼은 설계이고, 아래 "현재
+제한"에 있듯 아직 구현되지 않았습니다. 지금 앱은 샘플당 1회만 측정합니다.
+
 ## 프로젝트 구조
 
 현재 주요 구성은 다음과 같습니다.
@@ -237,12 +252,23 @@ mobile_bench/
 ├── lib/
 │   ├── main.dart
 │   └── src/
-│       ├── benchmark_home_page.dart       # 수동 실행 홈
-│       ├── benchmark_batch_page.dart      # 전체 자동 실행과 진행 상태
-│       ├── benchmark_coordinator.dart     # 단일/배치 실행 조율
-│       ├── benchmark_services.dart        # 모델·데이터·whisper.cpp 엔진
-│       ├── sherpa_engine.dart             # sherpa-onnx 엔진
-│       └── result_repository.dart         # 실행 및 배치 JSON 저장
+│       ├── benchmark_home_page.dart          # 수동 실행 홈
+│       ├── benchmark_batch_page.dart         # 자동 실행 화면과 진행 상태
+│       ├── benchmark_batch_history_page.dart # 완료된 배치 이력
+│       ├── benchmark_history_page.dart       # 단일 실행 이력
+│       ├── benchmark_result_page.dart        # 결과 화면(그래프·내보내기·업로드)
+│       ├── benchmark_coordinator.dart        # 단일/배치 실행 조율, 화면 wakelock
+│       ├── benchmark_services.dart           # 모델 카탈로그·whisper.cpp 엔진
+│       ├── benchmark_run.dart                # 단일 실행/telemetry 데이터 모델
+│       ├── benchmark_batch.dart              # 배치 실행 데이터 모델
+│       ├── sherpa_engine.dart                # sherpa-onnx 엔진(스트리밍/오프라인)
+│       ├── model_manager_page.dart           # 모델 다운로드·검증·삭제 화면
+│       ├── server_manager_page.dart          # 업로드 서버 등록 화면
+│       ├── server_services.dart              # 서버 프로필 저장, 업로드 요청
+│       ├── telemetry_sampler.dart            # 500ms CPU/RAM/발열 폴링
+│       ├── telemetry_chart.dart              # CPU/RAM/발열 그래프 위젯
+│       ├── platform_bridge.dart              # 기기 정보·foreground service 연동
+│       └── result_repository.dart            # 실행·배치 JSON 저장/조회
 ├── packages/
 │   └── whisper_ggml/           # 로컬로 고정한 whisper.cpp Flutter 플러그인
 ├── assets/

@@ -1,7 +1,8 @@
-# STT Bench
+# EdgeSTT Bench
 
-Whisper 한 종류에 묶이지 않고 여러 로컬 STT 엔진을 같은 방식으로 실행하고,
-원본 출력과 비교 가능한 공통 출력을 모두 보존하는 CLI 프로젝트입니다.
+EdgeSTT Bench는 Whisper 한 종류에 묶이지 않고 여러 로컬 STT 엔진을 데스크톱과
+Android 실제 기기에서 같은 방식으로 실행하며, 원본 출력과 비교 가능한 공통
+출력을 모두 보존하는 벤치마크 프로젝트입니다.
 
 Android 실제 기기용 Flutter 벤치마크 앱은
 [`mobile_bench/`](mobile_bench/README.md)에서 확인할 수 있습니다.
@@ -247,7 +248,8 @@ sttbench/
 ├── artifacts.py, progress.py
 ├── adapters/                # STT 엔진별 차이
 ├── datasets/                # KCSC와 JSONL manifest
-└── metrics/                 # CER/WER; 화자 지표는 다음 단계
+├── diarization*.py          # inspect 전용 pyannote 화자 분리(세그먼트·RTTM)
+└── metrics/                 # CER/WER; KCSC 정답 대비 화자 분리 정확도는 다음 단계
 ```
 
 KCSC 다운로드 명령은 다음과 같습니다.

@@ -107,7 +107,7 @@ void main() {
   testWidgets('shows the benchmark shell', (tester) async {
     await tester.pumpWidget(const BenchmarkApp());
 
-    expect(find.text('STT Mobile Bench'), findsOneWidget);
+    expect(find.text('EdgeSTT Mobile Bench'), findsOneWidget);
     expect(find.text('테스트 설정'), findsOneWidget);
     expect(find.byKey(const Key('model-manager-button')), findsOneWidget);
     expect(find.byKey(const Key('model-dropdown')), findsOneWidget);

@@ -108,7 +108,7 @@ void main() {
     'result repository persists and marks abandoned runs interrupted',
     () async {
       final temporary = await Directory.systemTemp.createTemp(
-        'stt-bench-test-',
+        'edge-stt-bench-test-',
       );
       addTearDown(() => temporary.delete(recursive: true));
       final repository = ResultRepository(
@@ -134,7 +134,7 @@ void main() {
     'completedRunIdsBySample only matches completed runs of the same model',
     () async {
       final temporary = await Directory.systemTemp.createTemp(
-        'stt-bench-test-',
+        'edge-stt-bench-test-',
       );
       addTearDown(() => temporary.delete(recursive: true));
       final repository = ResultRepository(
@@ -166,7 +166,7 @@ void main() {
     'runBatch skips a sample already completed with the same model',
     () async {
       final temporary = await Directory.systemTemp.createTemp(
-        'stt-bench-test-',
+        'edge-stt-bench-test-',
       );
       addTearDown(() => temporary.delete(recursive: true));
       final repository = ResultRepository(

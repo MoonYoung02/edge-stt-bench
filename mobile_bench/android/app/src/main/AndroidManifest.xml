@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
-        android:label="STT Mobile Bench"
+        android:label="EdgeSTT Mobile Bench"
         android:name=".BenchmarkApplication"
         android:usesCleartextTraffic="true"
         android:icon="@mipmap/ic_launcher">

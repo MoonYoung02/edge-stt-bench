@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert STT benchmark JSON files into readable Markdown reports."""
+"""Convert EdgeSTT Bench JSON files into readable Markdown reports."""
 
 from __future__ import annotations
 
@@ -101,7 +101,7 @@ def report(data: dict[str, Any], source: Path) -> tuple[str, dict[str, Any]]:
     rows = transcription_rows(result)
     repeats = repeated_rows(result)
     status = str(data.get("status") or "unknown")
-    title = f"{data.get('modelId') or 'unknown-model'} · STT 벤치마크 결과"
+    title = f"{data.get('modelId') or 'unknown-model'} · EdgeSTT 벤치마크 결과"
 
     lines = [
         f"# {title}",
@@ -219,7 +219,7 @@ def main() -> None:
         index_rows.append((name, index_row))
 
     index = [
-        "# STT 벤치마크 결과 목록",
+        "# EdgeSTT 벤치마크 결과 목록",
         "",
         f"고유 실행 {len(index_rows)}개를 변환했습니다. 중복 JSON {duplicate_count}개는 제외했습니다.",
         "",

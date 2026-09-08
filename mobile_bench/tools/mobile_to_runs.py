@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert exported STT Mobile Bench results into the desktop `runs/` layout.
+"""Convert exported EdgeSTT Mobile Bench results into the desktop `runs/` layout.
 
 `sttbench/evaluator.py`'s `evaluate_kcsc` writes each desktop evaluation as:
 
@@ -77,7 +77,7 @@ from sttbench.runner import safe_name  # noqa: E402
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Convert STT Mobile Bench run JSON into the desktop runs/ layout."
+        description="Convert EdgeSTT Mobile Bench JSON into the desktop runs/ layout."
     )
     parser.add_argument(
         "input", type=Path, help="run JSON file, or a directory searched recursively"

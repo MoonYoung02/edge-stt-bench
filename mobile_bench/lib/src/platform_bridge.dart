@@ -63,7 +63,7 @@ class PlatformBridge {
     try {
       await _channel.invokeMethod<void>('startBackgroundExecution', {
         'runId': runId,
-        'title': 'STT 벤치마크 실행 중',
+        'title': 'EdgeSTT 벤치마크 실행 중',
         'subtitle': modelName,
       });
     } on MissingPluginException {

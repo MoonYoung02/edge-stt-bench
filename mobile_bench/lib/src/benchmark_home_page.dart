@@ -221,7 +221,7 @@ class _BenchmarkHomePageState extends State<BenchmarkHomePage> {
     final visibleSamples = _coordinator.liveSamples;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('STT Mobile Bench'),
+        title: const Text('EdgeSTT Mobile Bench'),
         actions: [
           IconButton(
             key: const Key('server-manager-button'),

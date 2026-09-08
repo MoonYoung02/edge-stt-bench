@@ -12,7 +12,7 @@ class BenchmarkApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'STT Mobile Bench',
+      title: 'EdgeSTT Mobile Bench',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF315FD3)),

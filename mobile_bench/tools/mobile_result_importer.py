@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Score STT Mobile Bench automatic-benchmark batches with sttbench's CER/WER.
+"""Score EdgeSTT Mobile Bench automatic batches with sttbench's CER/WER.
 
 The Flutter app's "정답지 있는 샘플 전체 자동 실행" batch feature
 (`BenchmarkCoordinator.runBatch` in lib/src/benchmark_coordinator.dart) runs
@@ -50,7 +50,7 @@ from sttbench.metrics.text import compare  # noqa: E402
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Score STT Mobile Bench batch results with the desktop CER/WER "
+            "Score EdgeSTT Mobile Bench results with the desktop CER/WER "
             "implementation."
         )
     )

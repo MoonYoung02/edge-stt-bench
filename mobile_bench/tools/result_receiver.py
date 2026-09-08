@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Receive STT benchmark result JSON files over the local network."""
+"""Receive EdgeSTT Bench result JSON files over the local network."""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ class Handler(BaseHTTPRequestHandler):
             HTTPStatus.OK,
             {
                 "ok": True,
-                "service": "stt-benchmark-result-receiver",
+                "service": "edge-stt-bench-result-receiver",
                 "uploadPath": UPLOAD_PATH,
             },
         )
@@ -115,7 +115,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="STT benchmark JSON receiver")
+    parser = argparse.ArgumentParser(description="EdgeSTT Bench JSON receiver")
     parser.add_argument("--host", default="0.0.0.0", help="listen address (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=8787, help="listen port (default: 8787)")
     parser.add_argument(
@@ -135,7 +135,7 @@ def main() -> None:
     server = ResultReceiver((args.host, args.port), Handler)
     server.output_dir = output_dir
     server.bearer_token = args.token
-    print(f"STT benchmark receiver: http://{args.host}:{args.port}", flush=True)
+    print(f"EdgeSTT Bench receiver: http://{args.host}:{args.port}", flush=True)
     print(f"POST {UPLOAD_PATH}", flush=True)
     print(f"저장 위치: {output_dir}", flush=True)
     print("종료: Ctrl+C", flush=True)

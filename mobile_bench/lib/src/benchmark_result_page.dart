@@ -29,7 +29,7 @@ class BenchmarkResultPage extends StatelessWidget {
       final file = await resultRepository.fileFor(benchmarkRun.runId);
       final exported = await (platform ?? PlatformBridge()).exportResult(
         sourcePath: file.path,
-        fileName: 'stt-bench-${benchmarkRun.runId}.json',
+        fileName: 'edge-stt-bench-${benchmarkRun.runId}.json',
       );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

@@ -168,7 +168,7 @@ def doctor() -> int:
     from sttbench.diarization import check_runtime
     from sttbench.registry import ModelRegistry
 
-    print("STT Bench 환경 확인")
+    print("EdgeSTT Bench 환경 확인")
     ffmpeg = shutil.which("ffmpeg")
     ffprobe = shutil.which("ffprobe")
     print(f"ffmpeg: {'준비됨' if ffmpeg else '없음'}")
