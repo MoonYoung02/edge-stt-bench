@@ -35,6 +35,7 @@ dependencies:
     path: packages/whisper_ggml
   sherpa_onnx: ^1.13.7
   archive: ^4.2.0
+  wakelock_plus: ^1.5.2
 
 dev_dependencies:
   flutter_test:

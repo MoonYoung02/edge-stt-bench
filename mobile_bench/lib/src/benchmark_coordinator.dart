@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/widgets.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:whisper_ggml/whisper_ggml.dart';
 
 import 'benchmark_batch.dart';
@@ -56,6 +57,12 @@ class BenchmarkCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   BenchmarkBatch? _activeBatch;
   bool _batchCancelRequested = false;
 
+  /// Reference count for the screen wakelock: [runBatch] acquires it once
+  /// for the whole batch and each per-sample [run] call also acquires/
+  /// releases it, so the screen stays on continuously across every sample
+  /// instead of flickering to sleep between them. See [_acquireWakelock].
+  int _wakelockRefCount = 0;
+
   BenchmarkRun? get activeRun => _activeRun;
   BenchmarkRun? get latestRun => _latestRun;
   BenchmarkBatch? get activeBatch => _activeBatch;
@@ -100,7 +107,7 @@ class BenchmarkCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _lastNotificationProgress = -1;
 
     final run = BenchmarkRun(
-      runId: _newRunId(),
+      runId: _newRunId(label: model.spec.id),
       status: BenchmarkRunStatus.running,
       startedAt: DateTime.now(),
       sampleAssetPath: sample.assetPath,
@@ -114,6 +121,7 @@ class BenchmarkCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     _activeRun = run;
     await results.save(run);
     notifyListeners();
+    await _acquireWakelock();
 
     try {
       await platform.startBackgroundExecution(
@@ -194,6 +202,7 @@ class BenchmarkCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       );
       _activeRun = null;
       _sampler = null;
+      await _releaseWakelock();
       notifyListeners();
     }
   }
@@ -229,91 +238,96 @@ class BenchmarkCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       throw StateError('정답 텍스트가 있는 샘플이 없습니다.');
     }
 
-    final priorRunIds = await results.completedRunIdsBySample(
-      modelId: model.spec.id,
-    );
+    await _acquireWakelock();
+    try {
+      final priorRunIds = await results.completedRunIdsBySample(
+        modelId: model.spec.id,
+      );
 
-    final batch = BenchmarkBatch(
-      batchId: _newRunId(),
-      modelId: model.spec.id,
-      threads: threads,
-      startedAt: DateTime.now(),
-      entries: labeled.map((sample) {
-        final priorRunId = priorRunIds[sample.assetPath];
-        return BenchmarkBatchEntry(
-          sampleId: sample.fileName,
-          sampleAssetPath: sample.assetPath,
-          status: priorRunId == null
-              ? BenchmarkBatchEntryStatus.pending
-              : BenchmarkBatchEntryStatus.completed,
-          runId: priorRunId,
-          reusedFromPriorRun: priorRunId != null,
-        );
-      }).toList(),
-    );
-    _activeBatch = batch;
-    _batchCancelRequested = false;
-    await results.saveBatch(batch);
-    notifyListeners();
+      final batch = BenchmarkBatch(
+        batchId: _newRunId(label: model.spec.id),
+        modelId: model.spec.id,
+        threads: threads,
+        startedAt: DateTime.now(),
+        entries: labeled.map((sample) {
+          final priorRunId = priorRunIds[sample.assetPath];
+          return BenchmarkBatchEntry(
+            sampleId: sample.fileName,
+            sampleAssetPath: sample.assetPath,
+            status: priorRunId == null
+                ? BenchmarkBatchEntryStatus.pending
+                : BenchmarkBatchEntryStatus.completed,
+            runId: priorRunId,
+            reusedFromPriorRun: priorRunId != null,
+          );
+        }).toList(),
+      );
+      _activeBatch = batch;
+      _batchCancelRequested = false;
+      await results.saveBatch(batch);
+      notifyListeners();
 
-    for (var index = 0; index < labeled.length; index++) {
-      final entry = batch.entries[index];
-      if (entry.reusedFromPriorRun) continue;
-      if (_batchCancelRequested) {
-        entry.status = BenchmarkBatchEntryStatus.skipped;
+      for (var index = 0; index < labeled.length; index++) {
+        final entry = batch.entries[index];
+        if (entry.reusedFromPriorRun) continue;
+        if (_batchCancelRequested) {
+          entry.status = BenchmarkBatchEntryStatus.skipped;
+          await results.saveBatch(batch);
+          continue;
+        }
+
+        await _recordThermalState(entry);
+
+        entry.status = BenchmarkBatchEntryStatus.running;
         await results.saveBatch(batch);
-        continue;
+        notifyListeners();
+
+        try {
+          final sampleRun = await run(
+            sample: labeled[index],
+            model: model,
+            threads: threads,
+            batchId: batch.batchId,
+            sampleId: entry.sampleId,
+          );
+          entry.runId = sampleRun?.runId;
+          if (sampleRun?.status == BenchmarkRunStatus.cancelled) {
+            _batchCancelRequested = true;
+            entry.status = BenchmarkBatchEntryStatus.skipped;
+          } else {
+            entry.status = sampleRun?.status == BenchmarkRunStatus.completed
+                ? BenchmarkBatchEntryStatus.completed
+                : BenchmarkBatchEntryStatus.failed;
+          }
+        } catch (exception) {
+          if (_cancelRequested) {
+            _batchCancelRequested = true;
+            entry.status = BenchmarkBatchEntryStatus.skipped;
+          } else {
+            entry.status = BenchmarkBatchEntryStatus.failed;
+            entry.error = exception.toString();
+          }
+        }
+        await results.saveBatch(batch);
+        notifyListeners();
       }
 
-      await _recordThermalState(entry);
-
-      entry.status = BenchmarkBatchEntryStatus.running;
+      batch
+        ..status = _batchCancelRequested
+            ? BenchmarkBatchStatus.cancelled
+            : (batch.failedCount > 0
+                  ? BenchmarkBatchStatus.completedWithErrors
+                  : BenchmarkBatchStatus.completed)
+        ..cancelRequested = _batchCancelRequested
+        ..completedAt = DateTime.now();
       await results.saveBatch(batch);
+      _activeBatch = null;
+      _status = '준비됨';
       notifyListeners();
-
-      try {
-        final sampleRun = await run(
-          sample: labeled[index],
-          model: model,
-          threads: threads,
-          batchId: batch.batchId,
-          sampleId: entry.sampleId,
-        );
-        entry.runId = sampleRun?.runId;
-        if (sampleRun?.status == BenchmarkRunStatus.cancelled) {
-          _batchCancelRequested = true;
-          entry.status = BenchmarkBatchEntryStatus.skipped;
-        } else {
-          entry.status = sampleRun?.status == BenchmarkRunStatus.completed
-              ? BenchmarkBatchEntryStatus.completed
-              : BenchmarkBatchEntryStatus.failed;
-        }
-      } catch (exception) {
-        if (_cancelRequested) {
-          _batchCancelRequested = true;
-          entry.status = BenchmarkBatchEntryStatus.skipped;
-        } else {
-          entry.status = BenchmarkBatchEntryStatus.failed;
-          entry.error = exception.toString();
-        }
-      }
-      await results.saveBatch(batch);
-      notifyListeners();
+      return batch;
+    } finally {
+      await _releaseWakelock();
     }
-
-    batch
-      ..status = _batchCancelRequested
-          ? BenchmarkBatchStatus.cancelled
-          : (batch.failedCount > 0
-                ? BenchmarkBatchStatus.completedWithErrors
-                : BenchmarkBatchStatus.completed)
-      ..cancelRequested = _batchCancelRequested
-      ..completedAt = DateTime.now();
-    await results.saveBatch(batch);
-    _activeBatch = null;
-    _status = '준비됨';
-    notifyListeners();
-    return batch;
   }
 
   Future<void> requestCancelBatch() async {
@@ -334,6 +348,35 @@ class BenchmarkCoordinator extends ChangeNotifier with WidgetsBindingObserver {
     final status = snapshot['thermalStatus'] as String?;
     entry.thermalStatusAtStart = status;
     entry.thermalThrottled = thermalSeverityIndex(status) >= _batchThermalPauseThreshold;
+  }
+
+  /// Keeps the screen on (no lock screen, no display sleep) for as long as
+  /// a benchmark is running — a long KCSC file or a full 22-sample batch
+  /// otherwise gets interrupted by the screen locking mid-run, and RTF
+  /// comparisons are more trustworthy when every run measures under the
+  /// same screen-on state instead of some samples happening to run through
+  /// a lock. Ref-counted so a batch's outer acquire and each inner [run]'s
+  /// own acquire/release don't turn the wakelock off between samples.
+  Future<void> _acquireWakelock() async {
+    _wakelockRefCount++;
+    if (_wakelockRefCount > 1) return;
+    try {
+      await WakelockPlus.enable();
+    } on Object {
+      // Desktop/test hosts and platforms without the plugin's native side
+      // must not abort the benchmark over a screen-on nicety.
+    }
+  }
+
+  Future<void> _releaseWakelock() async {
+    if (_wakelockRefCount == 0) return;
+    _wakelockRefCount--;
+    if (_wakelockRefCount > 0) return;
+    try {
+      await WakelockPlus.disable();
+    } on Object {
+      // See _acquireWakelock.
+    }
   }
 
   Future<void> requestCancel() async {
@@ -377,11 +420,21 @@ class BenchmarkCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   }
 }
 
-String _newRunId() {
+/// Builds a run/batch id that doubles as its file name (`ResultRepository`
+/// names files after it verbatim, and the export button on the result page
+/// uses it as-is too). [label] — normally a model id such as
+/// `whisper-small-q8_0` — is prefixed so a pulled or exported JSON file
+/// shows which model produced it without opening it first.
+String _newRunId({String? label}) {
   final now = DateTime.now().toUtc();
   final random = Random.secure()
       .nextInt(0xFFFFFF)
       .toRadixString(16)
       .padLeft(6, '0');
-  return '${now.toIso8601String().replaceAll(RegExp('[-:.Z]'), '')}-$random';
+  final timestamp = now.toIso8601String().replaceAll(RegExp('[-:.Z]'), '');
+  final prefix = label == null ? '' : '${_sanitizeForFileName(label)}-';
+  return '$prefix$timestamp-$random';
 }
+
+String _sanitizeForFileName(String value) =>
+    value.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '-');
