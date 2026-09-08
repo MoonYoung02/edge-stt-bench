@@ -21,6 +21,17 @@ const String _sherpaOnnxReleaseUrl =
 /// and [ModelRepository.resolvedModelFiles]).
 enum SttEngineKind { whisperCpp, sherpaOnnxStreaming, sherpaOnnxOffline }
 
+/// Short label for [SttEngineKind], shown next to a model's name wherever the
+/// catalog is listed (model manager, benchmark/batch model pickers) so it's
+/// clear at a glance which native runtime a model needs.
+String engineLabel(SttEngineKind engine) {
+  return switch (engine) {
+    SttEngineKind.whisperCpp => 'GGML',
+    SttEngineKind.sherpaOnnxStreaming => 'sherpa-onnx · 스트리밍',
+    SttEngineKind.sherpaOnnxOffline => 'sherpa-onnx · 오프라인',
+  };
+}
+
 class ModelSpec {
   const ModelSpec({
     required this.id,
@@ -263,6 +274,18 @@ class AudioSample {
   String get fileName => assetPath.split('/').last;
   String get extension => _fileExtension(fileName);
   bool get isWav => extension == '.wav';
+}
+
+/// Whether [sample] can be fed to [engine] as-is. whisper.cpp normalizes any
+/// [supportedAudioExtensions] container via FFmpeg internally, so it accepts
+/// everything; the sherpa-onnx engines (`sherpa_engine.dart`) currently only
+/// read 16kHz mono 16-bit PCM WAV directly, so only `.wav` samples pass here.
+/// This is a cheap, extension-only pre-check for the picker UI — the engine
+/// itself still verifies sample rate/channel count and throws a clear error
+/// if a `.wav` file turns out not to actually be 16kHz mono.
+bool isAudioCompatibleWithEngine(AudioSample sample, SttEngineKind engine) {
+  if (engine == SttEngineKind.whisperCpp) return true;
+  return sample.isWav;
 }
 
 class StagedAudio {

@@ -39,6 +39,15 @@ class _BenchmarkHomePageState extends State<BenchmarkHomePage> {
 
   bool get _busy => _initializing || _coordinator.isBusy;
 
+  /// Whether [sample] can run against the currently selected model. Always
+  /// true until a model is picked, so the audio dropdown isn't pre-emptively
+  /// disabled before the user has chosen anything.
+  bool _sampleCompatible(AudioSample sample) {
+    final engine = _selectedModel?.spec.engine;
+    if (engine == null) return true;
+    return isAudioCompatibleWithEngine(sample, engine);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -275,7 +284,8 @@ class _BenchmarkHomePageState extends State<BenchmarkHomePage> {
                     (model) => DropdownMenuItem(
                       value: model,
                       child: Text(
-                        '${model.spec.name} · ${formatBytes(model.spec.sizeBytes)}',
+                        '${model.spec.name} · ${engineLabel(model.spec.engine)} · '
+                        '${formatBytes(model.spec.sizeBytes)}',
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -309,8 +319,11 @@ class _BenchmarkHomePageState extends State<BenchmarkHomePage> {
                   .map(
                     (sample) => DropdownMenuItem(
                       value: sample,
+                      enabled: _sampleCompatible(sample),
                       child: Text(
-                        sample.fileName,
+                        _sampleCompatible(sample)
+                            ? sample.fileName
+                            : '${sample.fileName} · 이 모델은 WAV만 지원',
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -320,6 +333,15 @@ class _BenchmarkHomePageState extends State<BenchmarkHomePage> {
                   ? null
                   : (sample) => setState(() => _selectedSample = sample),
             ),
+            if (_selectedSample != null &&
+                !_sampleCompatible(_selectedSample!)) ...[
+              const SizedBox(height: 8),
+              _CompatibilityNotice(
+                message:
+                    '${_selectedModel?.spec.name}은(는) 16kHz mono WAV 입력만 '
+                    '지원합니다. 다른 오디오를 고르거나 모델을 바꿔주세요.',
+              ),
+            ],
             const SizedBox(height: 10),
             DropdownButtonFormField<int>(
               initialValue: _threads,
@@ -343,7 +365,10 @@ class _BenchmarkHomePageState extends State<BenchmarkHomePage> {
             FilledButton.icon(
               key: const Key('run-button'),
               onPressed:
-                  _busy || _selectedSample == null || _selectedModel == null
+                  _busy ||
+                      _selectedSample == null ||
+                      _selectedModel == null ||
+                      !_sampleCompatible(_selectedSample!)
                   ? null
                   : _runBenchmark,
               icon: const Icon(Icons.play_arrow_rounded),
@@ -558,6 +583,37 @@ class _LiveSparklinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _LiveSparklinePainter oldDelegate) => true;
+}
+
+class _CompatibilityNotice extends StatelessWidget {
+  const _CompatibilityNotice({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      color: colors.tertiaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.info_outline, color: colors.onTertiaryContainer, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(color: colors.onTertiaryContainer),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ErrorCard extends StatelessWidget {

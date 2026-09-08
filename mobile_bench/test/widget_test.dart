@@ -28,6 +28,21 @@ void main() {
     );
   });
 
+  test('sherpa-onnx engines only accept WAV, whisper.cpp accepts anything', () {
+    const wav = AudioSample(assetPath: 'assets/data/kcsc/WAV/a.wav');
+    const m4a = AudioSample(assetPath: 'assets/data/recording.m4a');
+
+    for (final engine in [
+      SttEngineKind.sherpaOnnxStreaming,
+      SttEngineKind.sherpaOnnxOffline,
+    ]) {
+      expect(isAudioCompatibleWithEngine(wav, engine), isTrue);
+      expect(isAudioCompatibleWithEngine(m4a, engine), isFalse);
+    }
+    expect(isAudioCompatibleWithEngine(wav, SttEngineKind.whisperCpp), isTrue);
+    expect(isAudioCompatibleWithEngine(m4a, SttEngineKind.whisperCpp), isTrue);
+  });
+
   test('model catalog has reproducible download metadata', () {
     expect(modelCatalog.map((model) => model.id).toSet(), hasLength(13));
     for (final model in modelCatalog) {

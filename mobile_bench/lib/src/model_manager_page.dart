@@ -244,7 +244,7 @@ class _ModelDownloadCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${_engineLabel(model.engine)} · '
+                        '${engineLabel(model.engine)} · '
                         '${formatBytes(model.sizeBytes)}',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
@@ -285,13 +285,5 @@ class _ModelDownloadCard extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  static String _engineLabel(SttEngineKind engine) {
-    return switch (engine) {
-      SttEngineKind.whisperCpp => 'GGML',
-      SttEngineKind.sherpaOnnxStreaming => 'sherpa-onnx · streaming',
-      SttEngineKind.sherpaOnnxOffline => 'sherpa-onnx · offline',
-    };
   }
 }

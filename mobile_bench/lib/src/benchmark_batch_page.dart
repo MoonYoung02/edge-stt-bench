@@ -136,7 +136,7 @@ class _BenchmarkBatchPageState extends State<BenchmarkBatchPage> {
                       (model) => DropdownMenuItem(
                         value: model,
                         child: Text(
-                          model.spec.name,
+                          '${model.spec.name} · ${engineLabel(model.spec.engine)}',
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
