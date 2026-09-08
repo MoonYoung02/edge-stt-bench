@@ -3,8 +3,15 @@
 Whisper 한 종류에 묶이지 않고 여러 로컬 STT 엔진을 같은 방식으로 실행하고,
 원본 출력과 비교 가능한 공통 출력을 모두 보존하는 CLI 프로젝트입니다.
 
-Android/iOS 실제 기기용 Flutter 벤치마크 앱은
+Android 실제 기기용 Flutter 벤치마크 앱은
 [`mobile_bench/`](mobile_bench/README.md)에서 확인할 수 있습니다.
+
+모바일 앱은 단일 오디오 수동 실행과 정답이 있는 KCSC 22개 샘플의 자동 순차
+실행을 지원합니다. 모바일에서 내보낸 결과는 동일한 Python CER/WER 구현으로
+채점하거나 이 프로젝트의 `runs/` 구조로 변환할 수 있습니다. 실행 및 결과 수집
+방법은 모바일 앱 README의
+[모바일 결과 채점과 변환](mobile_bench/README.md#모바일-결과-채점과-변환)을
+참고하세요.
 
 ## 가장 자주 쓰는 명령
 
@@ -143,6 +150,26 @@ python -m sttbench doctor
 python -m sttbench inspect "테스트 녹음본.m4a" --model base
 ```
 
+### whisper.cpp 크기·양자화 비교
+
+whisper.cpp GGML 양자화 모델(tiny/base/small/medium × Q5/Q8, 총 8개, `config/models.yaml`의
+`whisper-cpp-*` 항목)을 CPU에서 한 번에 비교하려면 전용 스크립트를 사용합니다.
+내부적으로 위 `evaluate-all --devices cpu`를 그대로 호출하므로 결과 위치와 형식은
+동일합니다.
+
+```bash
+# 먼저 샘플 1개로 8개 모델이 다 정상 동작하는지 점검
+./scripts/whisper_cpp_matrix.sh smoke
+
+# 문제없으면 KCSC 전체로 실제 비교 실행 (모델이 클수록 오래 걸림)
+./scripts/whisper_cpp_matrix.sh full
+```
+
+결과는 `runs/<실행ID>__kcsc-matrix/summary.md`에 모델별 CER/WER/RTF 비교표로
+저장됩니다. large-v3-turbo/large-v3는 샘플 1개에도 CPU에서 8분 안팎 걸려 기본
+대상에서 뺐습니다. 필요하면 `config/models.yaml`에 해당 모델을 다시 등록하고
+`scripts/whisper_cpp_matrix.sh`의 `MODELS` 배열에 추가하세요.
+
 ## 모델 추가
 
 모델 선택지는 [config/models.yaml](config/models.yaml) 한 곳에서 관리합니다.
@@ -163,10 +190,9 @@ models:
 
 - `whisper_python`: `openai-whisper`, Apple MPS
 - `whisper_cpp`: `whisper.cpp`, CPU. tiny/base/small/medium(Q5·Q8) 총 8개 GGML
-  양자화 모델이 `whisper-cpp-*` 이름으로 등록되어 있습니다. large-v3-turbo/large-v3는
-  샘플 1개에도 CPU에서 8분 안팎 걸려 기본 대상에서 뺐습니다(필요하면 models.yaml에
-  다시 추가). `scripts/whisper_cpp_matrix.sh`로 크기·양자화 전체를 한 번에
-  평가할 수 있습니다.
+  양자화 모델이 `whisper-cpp-*` 이름으로 등록되어 있습니다. 크기·양자화 전체를
+  한 번에 비교하는 방법은 위 [whisper.cpp 크기·양자화 비교](#whispercpp-크기양자화-비교)를
+  참고하세요.
 
 ## 결과 폴더
 
