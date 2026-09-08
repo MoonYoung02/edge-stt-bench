@@ -139,6 +139,14 @@ void main() {
     expect(find.byKey(const Key('formatted-model-output')), findsOneWidget);
     expect(find.byKey(const Key('no-reference-card')), findsOneWidget);
     expect(find.text('정답 TXT 없음'), findsOneWidget);
+
+    // The transcript card starts collapsed (see _TranscriptCard) — the long
+    // KCSC transcripts that motivated this are exactly what shouldn't be on
+    // screen until the user asks for them.
+    expect(find.textContaining('테스트 문장'), findsNothing);
+    await tester.tap(find.byKey(const Key('formatted-model-output')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('테스트 문장'), findsOneWidget);
   });
 }
 

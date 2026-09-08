@@ -338,7 +338,10 @@ class _DeviceCard extends StatelessWidget {
 String _number(double? value, String unit) =>
     value == null ? 'N/A' : '${value.toStringAsFixed(1)}$unit';
 
-class _TranscriptCard extends StatelessWidget {
+/// A transcript block that starts collapsed and expands on tap — full
+/// KCSC transcripts run to hundreds of timestamped lines, and showing every
+/// one unfolded made the result page scroll on forever.
+class _TranscriptCard extends StatefulWidget {
   const _TranscriptCard({
     required this.title,
     required this.subtitle,
@@ -351,21 +354,39 @@ class _TranscriptCard extends StatelessWidget {
   final String text;
 
   @override
+  State<_TranscriptCard> createState() => _TranscriptCardState();
+}
+
+class _TranscriptCardState extends State<_TranscriptCard> {
+  bool _expanded = false;
+
+  int get _lineCount =>
+      widget.text.isEmpty ? 0 : widget.text.split('\n').length;
+
+  @override
   Widget build(BuildContext context) {
     return Card.outlined(
       margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          onExpansionChanged: (value) => setState(() => _expanded = value),
+          tilePadding: const EdgeInsets.fromLTRB(16, 0, 12, 0),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          title: Text(widget.title, style: Theme.of(context).textTheme.titleSmall),
+          subtitle: Text(
+            _expanded || _lineCount <= 1
+                ? widget.subtitle
+                : '${widget.subtitle} · $_lineCount줄',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           children: [
-            Text(title, style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 2),
-            Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-            const Divider(height: 20),
-            SelectableText(
-              text,
-              style: const TextStyle(fontFamily: 'monospace', height: 1.55),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SelectableText(
+                widget.text,
+                style: const TextStyle(fontFamily: 'monospace', height: 1.55),
+              ),
             ),
           ],
         ),
