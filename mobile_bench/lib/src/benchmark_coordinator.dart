@@ -203,6 +203,14 @@ class BenchmarkCoordinator extends ChangeNotifier with WidgetsBindingObserver {
   /// `referenceAssetPath` are skipped up front: CER/WER cannot be scored for
   /// them (see docs/DATASET.md §7).
   ///
+  /// Before starting, checks history for a sample already benchmarked with
+  /// this exact model (any past run, not just an earlier batch) and skips
+  /// re-running those — the entry is marked completed right away, pointing
+  /// at the prior run instead (`entry.reusedFromPriorRun`). This makes it
+  /// cheap to top up a batch after adding new samples, or to resume one that
+  /// only got partway through model+dataset coverage before being cancelled
+  /// or interrupted.
+  ///
   /// Each sample's [BenchmarkRun] is tagged with the returned batch's
   /// `batchId` and persisted individually, exactly like a manual run, so the
   /// existing history/export/upload flows keep working unchanged. The batch
@@ -221,19 +229,27 @@ class BenchmarkCoordinator extends ChangeNotifier with WidgetsBindingObserver {
       throw StateError('정답 텍스트가 있는 샘플이 없습니다.');
     }
 
+    final priorRunIds = await results.completedRunIdsBySample(
+      modelId: model.spec.id,
+    );
+
     final batch = BenchmarkBatch(
       batchId: _newRunId(),
       modelId: model.spec.id,
       threads: threads,
       startedAt: DateTime.now(),
-      entries: labeled
-          .map(
-            (sample) => BenchmarkBatchEntry(
-              sampleId: sample.fileName,
-              sampleAssetPath: sample.assetPath,
-            ),
-          )
-          .toList(),
+      entries: labeled.map((sample) {
+        final priorRunId = priorRunIds[sample.assetPath];
+        return BenchmarkBatchEntry(
+          sampleId: sample.fileName,
+          sampleAssetPath: sample.assetPath,
+          status: priorRunId == null
+              ? BenchmarkBatchEntryStatus.pending
+              : BenchmarkBatchEntryStatus.completed,
+          runId: priorRunId,
+          reusedFromPriorRun: priorRunId != null,
+        );
+      }).toList(),
     );
     _activeBatch = batch;
     _batchCancelRequested = false;
@@ -242,6 +258,7 @@ class BenchmarkCoordinator extends ChangeNotifier with WidgetsBindingObserver {
 
     for (var index = 0; index < labeled.length; index++) {
       final entry = batch.entries[index];
+      if (entry.reusedFromPriorRun) continue;
       if (_batchCancelRequested) {
         entry.status = BenchmarkBatchEntryStatus.skipped;
         await results.saveBatch(batch);

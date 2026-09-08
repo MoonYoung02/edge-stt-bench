@@ -35,9 +35,20 @@ class _BenchmarkBatchPageState extends State<BenchmarkBatchPage> {
   BenchmarkBatch? _displayedBatch;
   String? _error;
 
+  /// Sample asset path → prior completed run id, for [_selectedModel].
+  /// Reloaded whenever the model changes so the "already covered" preview
+  /// below matches whichever model is currently picked. Empty (not null)
+  /// while loading, so the preview just shows nothing rather than a
+  /// placeholder flicker.
+  Map<String, String> _priorRunIds = const {};
+
   List<AudioSample> get _labeledSamples => widget.samples
       .where((sample) => sample.referenceAssetPath != null)
       .toList(growable: false);
+
+  int get _alreadyCoveredCount => _labeledSamples
+      .where((sample) => _priorRunIds.containsKey(sample.assetPath))
+      .length;
 
   @override
   void initState() {
@@ -45,6 +56,20 @@ class _BenchmarkBatchPageState extends State<BenchmarkBatchPage> {
     _selectedModel = widget.downloadedModels.firstOrNull;
     _displayedBatch = widget.existingBatch;
     widget.coordinator.addListener(_coordinatorChanged);
+    _loadPriorCoverage();
+  }
+
+  Future<void> _loadPriorCoverage() async {
+    final model = _selectedModel;
+    if (model == null) {
+      setState(() => _priorRunIds = const {});
+      return;
+    }
+    final priorRunIds = await widget.coordinator.results
+        .completedRunIdsBySample(modelId: model.spec.id);
+    if (mounted && model == _selectedModel) {
+      setState(() => _priorRunIds = priorRunIds);
+    }
   }
 
   @override
@@ -118,9 +143,15 @@ class _BenchmarkBatchPageState extends State<BenchmarkBatchPage> {
           children: [
             if (!readOnly) ...[
               Text(
-                '정답 텍스트가 있는 샘플 ${_labeledSamples.length}개를 선택한 '
-                '모델로 순서대로 실행합니다. 발열이 심해도 멈추지 않고 계속 '
-                '진행하며, 그런 샘플은 결과에 표시만 남깁니다.',
+                _alreadyCoveredCount == 0
+                    ? '정답 텍스트가 있는 샘플 ${_labeledSamples.length}개를 선택한 '
+                          '모델로 순서대로 실행합니다. 발열이 심해도 멈추지 않고 계속 '
+                          '진행하며, 그런 샘플은 결과에 표시만 남깁니다.'
+                    : '정답 텍스트가 있는 샘플 ${_labeledSamples.length}개 중 '
+                          '$_alreadyCoveredCount개는 이 모델로 이미 벤치마크한 적이 있어 '
+                          '건너뛰고, 나머지 ${_labeledSamples.length - _alreadyCoveredCount}개만 '
+                          '실행합니다. 발열이 심해도 멈추지 않고 계속 진행하며, 그런 '
+                          '샘플은 결과에 표시만 남깁니다.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 12),
@@ -144,7 +175,10 @@ class _BenchmarkBatchPageState extends State<BenchmarkBatchPage> {
                     .toList(),
                 onChanged: widget.coordinator.isBusy
                     ? null
-                    : (model) => setState(() => _selectedModel = model),
+                    : (model) {
+                        setState(() => _selectedModel = model);
+                        _loadPriorCoverage();
+                      },
               ),
               const SizedBox(height: 10),
               DropdownButtonFormField<int>(
@@ -176,7 +210,12 @@ class _BenchmarkBatchPageState extends State<BenchmarkBatchPage> {
                 icon: const Icon(Icons.playlist_play),
                 label: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 13),
-                  child: Text('샘플 ${_labeledSamples.length}개 자동 실행'),
+                  child: Text(
+                    _alreadyCoveredCount == 0
+                        ? '샘플 ${_labeledSamples.length}개 자동 실행'
+                        : '샘플 ${_labeledSamples.length - _alreadyCoveredCount}개 '
+                              '자동 실행 (기존 $_alreadyCoveredCount개 재사용)',
+                  ),
                 ),
               ),
               if (_error case final error?) ...[
@@ -313,10 +352,14 @@ class _BatchEntryTile extends StatelessWidget {
         child: Column(
           children: [
             ListTile(
-              leading: Icon(_icon(entry.status)),
+              leading: Icon(
+                entry.reusedFromPriorRun ? Icons.history : _icon(entry.status),
+              ),
               title: Text(entry.sampleId, overflow: TextOverflow.ellipsis),
               subtitle: liveStatus != null
                   ? Text(liveStatus!, overflow: TextOverflow.ellipsis)
+                  : entry.reusedFromPriorRun
+                  ? const Text('이전 실행 결과 재사용')
                   : entry.error != null
                   ? Text(
                       entry.error!,
@@ -326,7 +369,9 @@ class _BatchEntryTile extends StatelessWidget {
                   : entry.thermalThrottled
                   ? const Text('발열 상태에서 측정됨')
                   : null,
-              trailing: Text(_label(entry.status)),
+              trailing: Text(
+                entry.reusedFromPriorRun ? '재사용' : _label(entry.status),
+              ),
               onTap: onTap,
             ),
             if (liveProgress != null)

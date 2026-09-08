@@ -26,6 +26,7 @@ class BenchmarkBatchEntry {
     this.error,
     this.thermalStatusAtStart,
     this.thermalThrottled = false,
+    this.reusedFromPriorRun = false,
   });
 
   factory BenchmarkBatchEntry.fromJson(Map<String, dynamic> json) {
@@ -39,6 +40,7 @@ class BenchmarkBatchEntry {
       error: json['error'] as String?,
       thermalStatusAtStart: json['thermalStatusAtStart'] as String?,
       thermalThrottled: json['thermalThrottled'] as bool? ?? false,
+      reusedFromPriorRun: json['reusedFromPriorRun'] as bool? ?? false,
     );
   }
 
@@ -50,6 +52,13 @@ class BenchmarkBatchEntry {
   String? thermalStatusAtStart;
   bool thermalThrottled;
 
+  /// True when this entry was never executed by this batch because a prior
+  /// run (manual or from an earlier batch) already completed the same
+  /// model+sample combination — [runId] then points at that earlier run
+  /// instead of one this batch produced. See
+  /// `BenchmarkCoordinator.runBatch`.
+  bool reusedFromPriorRun;
+
   Map<String, dynamic> toJson() => {
     'sampleId': sampleId,
     'sampleAssetPath': sampleAssetPath,
@@ -59,6 +68,7 @@ class BenchmarkBatchEntry {
     if (thermalStatusAtStart != null)
       'thermalStatusAtStart': thermalStatusAtStart,
     'thermalThrottled': thermalThrottled,
+    'reusedFromPriorRun': reusedFromPriorRun,
   };
 }
 

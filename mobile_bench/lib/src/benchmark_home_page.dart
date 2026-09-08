@@ -159,7 +159,9 @@ class _BenchmarkHomePageState extends State<BenchmarkHomePage> {
   }
 
   Future<void> _openBatchHistory() async {
-    if (_coordinator.isRunningBatch) return;
+    // Viewing past batches is a read-only list; it must stay reachable even
+    // while a batch is actively running so the user isn't locked out of
+    // their own history just because a new run is in progress.
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => BenchmarkBatchHistoryPage(
@@ -230,7 +232,7 @@ class _BenchmarkHomePageState extends State<BenchmarkHomePage> {
           IconButton(
             key: const Key('batch-history-button'),
             tooltip: '자동 벤치마크 이력',
-            onPressed: _coordinator.isRunningBatch ? null : _openBatchHistory,
+            onPressed: _openBatchHistory,
             icon: const Icon(Icons.checklist_outlined),
           ),
           IconButton(

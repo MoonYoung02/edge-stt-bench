@@ -66,6 +66,27 @@ class ResultRepository {
     return runs;
   }
 
+  /// The most recent *completed* run's `runId` for each sample already
+  /// benchmarked with [modelId], across any past run — manual or batch, not
+  /// just a specific prior batch. Used by `BenchmarkCoordinator.runBatch` to
+  /// skip re-running a model+sample combination that's already covered.
+  Future<Map<String, String>> completedRunIdsBySample({
+    required String modelId,
+  }) async {
+    final result = <String, String>{};
+    // list() sorts newest-first, so the first match kept per sample here is
+    // the most recent completed run.
+    for (final run in await list()) {
+      if (run.modelId != modelId ||
+          run.status != BenchmarkRunStatus.completed ||
+          run.result == null) {
+        continue;
+      }
+      result.putIfAbsent(run.sampleAssetPath, () => run.runId);
+    }
+    return result;
+  }
+
   Future<void> markInterruptedRuns() async {
     for (final run in await list()) {
       if (run.status != BenchmarkRunStatus.running) continue;

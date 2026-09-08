@@ -4,41 +4,52 @@ import 'dart:io';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile_bench/src/benchmark_batch.dart';
+import 'package:mobile_bench/src/benchmark_coordinator.dart';
 import 'package:mobile_bench/src/benchmark_run.dart';
 import 'package:mobile_bench/src/benchmark_services.dart';
 import 'package:mobile_bench/src/result_repository.dart';
 import 'package:mobile_bench/src/server_services.dart';
 
 void main() {
-  BenchmarkRun createRun() {
-    final result = BenchmarkResult(
-      sample: const AudioSample(assetPath: 'assets/data/sample.m4a'),
-      transcript: '테스트',
-      formattedTranscript: '[0.000,1.000]\tPRED\tunknown\t테스트',
-      transcriptSegments: const [
-        BenchmarkSegment(
-          from: Duration.zero,
-          to: Duration(seconds: 1),
-          text: '테스트',
-        ),
-      ],
-      stagingTime: const Duration(milliseconds: 20),
-      processingTime: const Duration(seconds: 2),
-      audioDuration: const Duration(seconds: 4),
-      model: DownloadedModel(
-        spec: modelCatalog.first,
-        file: File('/models/model.bin'),
-      ),
-      segments: 1,
-    );
+  BenchmarkRun createRun({
+    String runId = 'run-1',
+    String? modelId,
+    String sampleAssetPath = 'assets/data/sample.m4a',
+    BenchmarkRunStatus status = BenchmarkRunStatus.completed,
+  }) {
+    final result = status == BenchmarkRunStatus.completed
+        ? BenchmarkResult(
+            sample: AudioSample(assetPath: sampleAssetPath),
+            transcript: '테스트',
+            formattedTranscript: '[0.000,1.000]\tPRED\tunknown\t테스트',
+            transcriptSegments: const [
+              BenchmarkSegment(
+                from: Duration.zero,
+                to: Duration(seconds: 1),
+                text: '테스트',
+              ),
+            ],
+            stagingTime: const Duration(milliseconds: 20),
+            processingTime: const Duration(seconds: 2),
+            audioDuration: const Duration(seconds: 4),
+            model: DownloadedModel(
+              spec: modelCatalog.firstWhere(
+                (spec) => spec.id == (modelId ?? modelCatalog.first.id),
+              ),
+              file: File('/models/model.bin'),
+            ),
+            segments: 1,
+          )
+        : null;
     return BenchmarkRun(
-      runId: 'run-1',
-      status: BenchmarkRunStatus.completed,
+      runId: runId,
+      status: status,
       startedAt: DateTime.utc(2026, 9, 6),
       completedAt: DateTime.utc(2026, 9, 6, 0, 1),
-      sampleAssetPath: result.sample.assetPath,
-      modelId: modelCatalog.first.id,
-      modelPath: result.model.file.path,
+      sampleAssetPath: sampleAssetPath,
+      modelId: modelId ?? modelCatalog.first.id,
+      modelPath: '/models/model.bin',
       threads: 4,
       device: const DeviceMetadata(
         platform: 'android',
@@ -116,6 +127,76 @@ void main() {
       expect(stored.single.status, BenchmarkRunStatus.interrupted);
       expect(stored.single.completedAt, isNotNull);
       expect(stored.single.error, contains('앱 프로세스'));
+    },
+  );
+
+  test(
+    'completedRunIdsBySample only matches completed runs of the same model',
+    () async {
+      final temporary = await Directory.systemTemp.createTemp(
+        'stt-bench-test-',
+      );
+      addTearDown(() => temporary.delete(recursive: true));
+      final repository = ResultRepository(
+        directoryProvider: () async => temporary,
+      );
+
+      final completed = createRun();
+      final failedSameModel = createRun(
+        runId: 'run-failed',
+        status: BenchmarkRunStatus.failed,
+      );
+      final otherModel = createRun(
+        runId: 'run-other-model',
+        modelId: modelCatalog[1].id,
+      );
+      await repository.save(completed);
+      await repository.save(failedSameModel);
+      await repository.save(otherModel);
+
+      final covered = await repository.completedRunIdsBySample(
+        modelId: completed.modelId,
+      );
+
+      expect(covered, {completed.sampleAssetPath: completed.runId});
+    },
+  );
+
+  test(
+    'runBatch skips a sample already completed with the same model',
+    () async {
+      final temporary = await Directory.systemTemp.createTemp(
+        'stt-bench-test-',
+      );
+      addTearDown(() => temporary.delete(recursive: true));
+      final repository = ResultRepository(
+        directoryProvider: () async => temporary,
+      );
+      final priorRun = createRun();
+      await repository.save(priorRun);
+
+      final coordinator = BenchmarkCoordinator(results: repository);
+      final sample = AudioSample(
+        assetPath: priorRun.sampleAssetPath,
+        referenceAssetPath: 'assets/data/kcsc/TXT/sample.txt',
+      );
+      final model = DownloadedModel(
+        spec: modelCatalog.firstWhere((spec) => spec.id == priorRun.modelId),
+        file: File(priorRun.modelPath),
+      );
+
+      final batch = await coordinator.runBatch(
+        samples: [sample],
+        model: model,
+        threads: 4,
+      );
+
+      expect(batch.status, BenchmarkBatchStatus.completed);
+      expect(batch.entries, hasLength(1));
+      final entry = batch.entries.single;
+      expect(entry.reusedFromPriorRun, isTrue);
+      expect(entry.status, BenchmarkBatchEntryStatus.completed);
+      expect(entry.runId, priorRun.runId);
     },
   );
 
